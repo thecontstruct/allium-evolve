@@ -25,5 +25,26 @@ Analyze the initial codebase and extract an Allium specification that captures:
 
 If the codebase appears to be bootstrapped from a template, mark inherited scaffolding clearly in the spec. The real domain evolution starts in subsequent commits.
 
+## Output Format
+
 Return your response as JSON matching the provided schema.
-The commitMessage should describe the base domain model extracted.
+
+**spec**: The Allium specification. Begin with a descriptive header comment
+summarizing the domain (e.g. `-- SaaS platform: users, teams, billing`).
+Update this header as the domain grows.
+
+**changelog**: Use this exact format:
+```
+## <sha8> — <Brief title>
+
+- Bullet describing each domain change
+- Another bullet if needed
+```
+If there are no domain-level changes, write:
+```
+## <sha8>
+
+No domain-level changes. <One-sentence reason>.
+```
+
+**commitMessage**: Describe the base domain model extracted.

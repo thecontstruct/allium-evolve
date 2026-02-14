@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 export interface EvolutionConfig {
 	repoPath: string;
@@ -20,7 +20,7 @@ export interface EvolutionConfig {
 
 export function defaultConfig(overrides: Partial<EvolutionConfig> = {}): EvolutionConfig {
 	return {
-		repoPath: overrides.repoPath ?? process.cwd(),
+		repoPath: resolve(overrides.repoPath ?? process.cwd()),
 		targetRef: overrides.targetRef ?? "HEAD",
 		windowSize: overrides.windowSize ?? 5,
 		processDepth: overrides.processDepth ?? 1,

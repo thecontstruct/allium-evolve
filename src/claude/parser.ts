@@ -1,10 +1,12 @@
 export interface ClaudeResponseEnvelope {
 	type: string;
 	subtype: string;
-	cost_usd: number;
+	cost_usd?: number;
+	total_cost_usd?: number;
 	duration_ms: number;
 	is_error: boolean;
 	result: string;
+	structured_output?: Record<string, unknown>;
 	session_id: string;
 }
 
@@ -35,8 +37,8 @@ function parseEnvelope(rawOutput: string): ClaudeResponseEnvelope {
 		throw new Error(`Claude CLI returned an error (subtype: ${String(env.subtype)}): ${String(env.result ?? "")}`);
 	}
 
-	if (typeof env.result !== "string") {
-		throw new Error('Missing "result" field (or not a string) in Claude CLI envelope');
+	if (!env.structured_output && typeof env.result !== "string") {
+		throw new Error('Missing "result" and "structured_output" fields in Claude CLI envelope');
 	}
 
 	return envelope as ClaudeResponseEnvelope;
@@ -52,27 +54,24 @@ function parseInnerJson<T>(resultStr: string): T {
 
 export function parseClaudeResponse(rawOutput: string): ParsedClaudeResponse {
 	const envelope = parseEnvelope(rawOutput);
-	const inner = parseInnerJson<{
-		spec: string;
-		changelog: string;
-		commitMessage: string;
-	}>(envelope.result);
+	const inner = envelope.structured_output
+		? (envelope.structured_output as { spec: string; changelog: string; commitMessage: string })
+		: parseInnerJson<{ spec: string; changelog: string; commitMessage: string }>(envelope.result);
 
 	return {
 		spec: inner.spec,
 		changelog: inner.changelog,
 		commitMessage: inner.commitMessage,
-		costUsd: envelope.cost_usd,
+		costUsd: envelope.total_cost_usd ?? envelope.cost_usd ?? 0,
 		sessionId: envelope.session_id,
 	};
 }
 
 export function parseChunkResponse(rawOutput: string): ParsedChunkResponse {
 	const envelope = parseEnvelope(rawOutput);
-	const inner = parseInnerJson<{
-		specPatch: string;
-		sectionsChanged: string[];
-	}>(envelope.result);
+	const inner = envelope.structured_output
+		? (envelope.structured_output as { specPatch: string; sectionsChanged: string[] })
+		: parseInnerJson<{ specPatch: string; sectionsChanged: string[] }>(envelope.result);
 
 	return {
 		specPatch: inner.specPatch,

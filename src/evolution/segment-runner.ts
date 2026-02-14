@@ -82,7 +82,7 @@ export async function runSegment(opts: {
 		});
 
 		currentSpec = result.spec;
-		const changelogEntry = `\n## ${commitSha.slice(0, 8)}\n\n${result.changelog}\n`;
+		const changelogEntry = `\n${result.changelog}\n`;
 		currentChangelog += changelogEntry;
 
 		const node = dag.get(commitSha);

@@ -30,6 +30,22 @@ function fillTemplate(template: string, vars: Record<string, string>): string {
 	return result;
 }
 
+export function extractUniqueEntries(trunkChangelog: string, branchChangelog: string): string {
+	const trunkShas = new Set<string>();
+	const shaPattern = /^## ([a-f0-9]{7,8})/gm;
+	for (const match of trunkChangelog.matchAll(shaPattern)) {
+		trunkShas.add(match[1]!);
+	}
+
+	const entries = branchChangelog.split(/(?=\n## )/);
+	const unique = entries.filter((entry) => {
+		const shaMatch = entry.match(/## ([a-f0-9]{7,8})/);
+		return shaMatch && !trunkShas.has(shaMatch[1]!);
+	});
+
+	return unique.join("");
+}
+
 export async function runMerge(opts: {
 	mergeSha: string;
 	trunkSpec: string;
@@ -78,8 +94,9 @@ export async function runMerge(opts: {
 		maxRetries: config.maxParseRetries,
 	});
 
+	const uniqueBranchEntries = extractUniqueEntries(trunkChangelog, branchChangelog);
 	const mergedChangelog =
-		trunkChangelog + branchChangelog + `\n## ${mergeSha.slice(0, 8)} (merge)\n\n${result.changelog}\n`;
+		trunkChangelog + uniqueBranchEntries + `\n## ${mergeSha.slice(0, 8)} (merge)\n\n${result.changelog}\n`;
 
 	const originalMessage = node?.message ?? "";
 	const commitMessage = [

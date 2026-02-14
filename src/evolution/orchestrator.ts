@@ -210,7 +210,7 @@ async function handleSegment(
 	segmentResults.set(segment.id, result);
 	stateTracker.updateSegmentStatus(segment.id, "complete");
 
-	if (!config.parallelBranches || segment.type === "trunk") {
+	if (segment.type === "trunk") {
 		await updateRef(config.repoPath, `refs/heads/${config.alliumBranch}`, result.tipAlliumSha);
 		stateTracker.updateBranchHead(result.tipAlliumSha);
 	}

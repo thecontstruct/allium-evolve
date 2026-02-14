@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseChunkResponse, parseClaudeResponse, validateResponse } from "../../src/claude/parser.js";
 
-function makeEnvelope(resultObj: Record<string, unknown>, overrides: Record<string, unknown> = {}): string {
+function makeLegacyEnvelope(resultObj: Record<string, unknown>, overrides: Record<string, unknown> = {}): string {
 	return JSON.stringify({
 		type: "result",
 		subtype: "success",
@@ -16,10 +16,40 @@ function makeEnvelope(resultObj: Record<string, unknown>, overrides: Record<stri
 	});
 }
 
+function makeStructuredEnvelope(resultObj: Record<string, unknown>, overrides: Record<string, unknown> = {}): string {
+	return JSON.stringify({
+		type: "result",
+		subtype: "success",
+		total_cost_usd: 0.05,
+		duration_ms: 5000,
+		duration_api_ms: 4500,
+		is_error: false,
+		num_turns: 1,
+		result: "",
+		structured_output: resultObj,
+		session_id: "sess-abc123",
+		...overrides,
+	});
+}
+
 describe("claude/parser.ts", () => {
 	describe("UNIT-033: Parse valid full response extracts spec, changelog, commitMessage", () => {
-		it("should extract spec, changelog, and commitMessage from a valid response", () => {
-			const raw = makeEnvelope({
+		it("should extract from legacy result-string envelope", () => {
+			const raw = makeLegacyEnvelope({
+				spec: "# My Spec\nSome content",
+				changelog: "- Added feature X",
+				commitMessage: "feat: add feature X",
+			});
+
+			const parsed = parseClaudeResponse(raw);
+
+			expect(parsed.spec).toBe("# My Spec\nSome content");
+			expect(parsed.changelog).toBe("- Added feature X");
+			expect(parsed.commitMessage).toBe("feat: add feature X");
+		});
+
+		it("should extract from structured_output envelope", () => {
+			const raw = makeStructuredEnvelope({
 				spec: "# My Spec\nSome content",
 				changelog: "- Added feature X",
 				commitMessage: "feat: add feature X",
@@ -34,19 +64,27 @@ describe("claude/parser.ts", () => {
 	});
 
 	describe("UNIT-034: Parse extracts cost and session ID from envelope", () => {
-		it("should extract costUsd and sessionId from the envelope", () => {
-			const raw = makeEnvelope(
-				{
-					spec: "spec",
-					changelog: "changelog",
-					commitMessage: "msg",
-				},
+		it("should extract costUsd from legacy cost_usd field", () => {
+			const raw = makeLegacyEnvelope(
+				{ spec: "spec", changelog: "changelog", commitMessage: "msg" },
 				{ cost_usd: 0.123, session_id: "sess-xyz789" },
 			);
 
 			const parsed = parseClaudeResponse(raw);
 
 			expect(parsed.costUsd).toBe(0.123);
+			expect(parsed.sessionId).toBe("sess-xyz789");
+		});
+
+		it("should extract costUsd from total_cost_usd field", () => {
+			const raw = makeStructuredEnvelope(
+				{ spec: "spec", changelog: "changelog", commitMessage: "msg" },
+				{ total_cost_usd: 0.456, session_id: "sess-xyz789" },
+			);
+
+			const parsed = parseClaudeResponse(raw);
+
+			expect(parsed.costUsd).toBe(0.456);
 			expect(parsed.sessionId).toBe("sess-xyz789");
 		});
 	});
@@ -61,18 +99,18 @@ describe("claude/parser.ts", () => {
 		});
 	});
 
-	describe("UNIT-036: Missing result field throws descriptive error", () => {
-		it("should throw when result field is missing", () => {
+	describe("UNIT-036: Missing result and structured_output throws descriptive error", () => {
+		it("should throw when both result and structured_output are missing", () => {
 			const raw = JSON.stringify({
 				type: "result",
 				subtype: "success",
 				is_error: false,
 			});
 
-			expect(() => parseClaudeResponse(raw)).toThrow(/missing "result" field/i);
+			expect(() => parseClaudeResponse(raw)).toThrow(/missing "result" and "structured_output"/i);
 		});
 
-		it("should throw when result field is not a string", () => {
+		it("should throw when result is not a string and structured_output is absent", () => {
 			const raw = JSON.stringify({
 				type: "result",
 				subtype: "success",
@@ -82,12 +120,12 @@ describe("claude/parser.ts", () => {
 				cost_usd: 0,
 			});
 
-			expect(() => parseClaudeResponse(raw)).toThrow(/missing "result" field/i);
+			expect(() => parseClaudeResponse(raw)).toThrow(/missing "result" and "structured_output"/i);
 		});
 	});
 
 	describe("UNIT-037: Malformed inner JSON throws descriptive error", () => {
-		it("should throw when the result field contains invalid JSON", () => {
+		it("should throw when result contains invalid JSON and no structured_output", () => {
 			const raw = JSON.stringify({
 				type: "result",
 				subtype: "success",
@@ -168,8 +206,20 @@ describe("claude/parser.ts", () => {
 	});
 
 	describe("UNIT-040: Parse chunk response extracts specPatch and sectionsChanged", () => {
-		it("should extract specPatch and sectionsChanged from a chunk response", () => {
-			const raw = makeEnvelope({
+		it("should extract from legacy result-string envelope", () => {
+			const raw = makeLegacyEnvelope({
+				specPatch: "--- a/spec\n+++ b/spec\n@@ ...",
+				sectionsChanged: ["## API", "## Models"],
+			});
+
+			const parsed = parseChunkResponse(raw);
+
+			expect(parsed.specPatch).toBe("--- a/spec\n+++ b/spec\n@@ ...");
+			expect(parsed.sectionsChanged).toEqual(["## API", "## Models"]);
+		});
+
+		it("should extract from structured_output envelope", () => {
+			const raw = makeStructuredEnvelope({
 				specPatch: "--- a/spec\n+++ b/spec\n@@ ...",
 				sectionsChanged: ["## API", "## Models"],
 			});
@@ -181,7 +231,7 @@ describe("claude/parser.ts", () => {
 		});
 
 		it("should handle empty sectionsChanged array", () => {
-			const raw = makeEnvelope({
+			const raw = makeLegacyEnvelope({
 				specPatch: "some patch",
 				sectionsChanged: [],
 			});
