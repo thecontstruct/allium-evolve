@@ -1,0 +1,30 @@
+{
+	"name": "allium-evolve",
+	"version": "0.1.0",
+	"description": "Distill an evolving Allium specification from any git repository's commit history",
+	"type": "module",
+	"bin": {
+		"allium-evolve": "./src/cli.ts"
+	},
+	"scripts": {
+		"start": "node --import tsx src/cli.ts",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"test:coverage": "vitest run --coverage",
+		"test:unit": "vitest run test/unit/*.unit.test.ts",
+		"test:integration": "vitest run test/integration/*.integration.test.ts",
+		"type-check": "tsc --noEmit",
+		"fixture": "bash test/fixtures/create-fixture-repo.sh"
+	},
+	"dependencies": {
+		"commander": "latest",
+		"tiktoken": "latest"
+	},
+	"devDependencies": {
+		"typescript": "latest",
+		"@types/node": "latest",
+		"tsx": "latest",
+		"vitest": "latest",
+		"@vitest/coverage-v8": "latest"
+	}
+}

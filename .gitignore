@@ -1,0 +1,6 @@
+node_modules/
+dist/
+coverage/
+test/fixtures/repo/
+.allium-state.json
+*.tsbuildinfo
