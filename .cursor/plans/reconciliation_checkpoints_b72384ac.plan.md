@@ -52,7 +52,7 @@ todos:
     status: completed
   - id: tests-spec
     content: "Phase 2: Tests for SpecStore, multi-file plumbing, module selection"
-    status: in_progress
+    status: completed
 isProject: false
 ---
 
