@@ -34,25 +34,25 @@ todos:
     status: completed
   - id: tests-recon
     content: "Phase 1: Unit tests for schedulers, source-reader; integration test with fixture"
-    status: in_progress
+    status: completed
   - id: spec-store
     content: "Phase 2: Create src/spec/store.ts — SpecStore abstraction over multi-file spec tree"
-    status: pending
+    status: completed
   - id: spec-plumbing
     content: "Phase 2: Update git/plumbing.ts to commit multiple spec files per allium commit"
-    status: pending
+    status: completed
   - id: spec-context
     content: "Phase 2: Update claude/context.ts to select relevant module specs per step"
-    status: pending
+    status: completed
   - id: spec-pipeline
     content: "Phase 2: Update segment-runner, merge-runner, orchestrator for SpecStore"
-    status: pending
+    status: completed
   - id: spec-prompts
     content: "Phase 2: Update prompt templates for module-aware spec output"
-    status: pending
+    status: completed
   - id: tests-spec
     content: "Phase 2: Tests for SpecStore, multi-file plumbing, module selection"
-    status: pending
+    status: in_progress
 isProject: false
 ---
 

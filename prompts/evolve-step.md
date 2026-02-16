@@ -17,6 +17,14 @@ Before proceeding:
 
 {fullDiffs}
 
+## Specification Structure
+
+The specification may be presented as a single document or as a master spec
+with module specs. When you see "## Master Specification" followed by
+"## Relevant Module Specifications", you are working with a modular spec.
+In that case, your response should update the master spec (cross-cutting
+concerns and relationships) while preserving module-level details.
+
 ## Instructions
 
 Update the Allium specification based on the changes above.

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { assembleContext } from "../claude/context.js";
+import { assembleContext, assembleModuleSpec } from "../claude/context.js";
 import { getModelForStep, type StepType } from "../claude/models.js";
 import { type ClaudeResult, invokeClaudeForChunk, invokeClaudeForStep } from "../claude/runner.js";
 import type { EvolutionConfig } from "../config.js";
@@ -9,6 +9,7 @@ import type { CommitNode, Segment } from "../dag/types.js";
 import { createAlliumCommit, updateRef } from "../git/plumbing.js";
 import type { ReconciliationScheduler, ReconciliationContext } from "../reconciliation/scheduler.js";
 import { runReconciliation } from "../reconciliation/runner.js";
+import type { SpecStore } from "../spec/store.js";
 import type { StateTracker } from "../state/tracker.js";
 import type { CompletedStep } from "../state/types.js";
 import { chunkDiff } from "./diff-chunker.js";
@@ -22,6 +23,7 @@ export interface SegmentRunnerResult {
 	currentSpec: string;
 	currentChangelog: string;
 	tipAlliumSha: string;
+	specStore?: SpecStore;
 }
 
 export type StepCallback = (step: CompletedStep, currentSpec: string, currentChangelog: string) => Promise<void>;
@@ -55,6 +57,7 @@ export async function runSegment(opts: {
 	scheduler?: ReconciliationScheduler;
 	stateTracker?: StateTracker;
 	trunkStepsCompleted?: number;
+	specStore?: SpecStore;
 }): Promise<SegmentRunnerResult> {
 	const {
 		segment,
@@ -67,6 +70,7 @@ export async function runSegment(opts: {
 		onStepComplete,
 		scheduler,
 		stateTracker,
+		specStore,
 	} = opts;
 	let trunkStepsCompleted = opts.trunkStepsCompleted ?? 0;
 
@@ -88,11 +92,15 @@ export async function runSegment(opts: {
 		const stepType: StepType = isInitial ? "initial-commit" : "evolve";
 		const model = getModelForStep(stepType, config);
 
+		const prevSpecForContext = specStore && specStore.getAllModules().size > 0
+			? assembleModuleSpec(specStore, [commitSha])
+			: currentSpec;
+
 		const context = await assembleContext({
 			windowState,
 			dag,
 			repoPath: config.repoPath,
-			prevSpec: currentSpec,
+			prevSpec: prevSpecForContext,
 		});
 
 		const result =
@@ -107,6 +115,9 @@ export async function runSegment(opts: {
 					);
 
 		currentSpec = result.spec;
+		if (specStore) {
+			specStore.setMasterSpec(result.spec);
+		}
 		const changelogEntry = `\n${result.changelog}\n`;
 		currentChangelog += changelogEntry;
 
@@ -183,7 +194,8 @@ export async function runSegment(opts: {
 			repoPath: config.repoPath,
 			originalSha: commitSha,
 			parentShas,
-			specContent: currentSpec,
+			specContent: specStore ? undefined : currentSpec,
+			specFiles: specStore ? specStore.toFileMap() : undefined,
 			changelogContent: currentChangelog,
 			commitMessage,
 			segmentId: segment.id,
@@ -214,6 +226,7 @@ export async function runSegment(opts: {
 		currentSpec,
 		currentChangelog,
 		tipAlliumSha,
+		specStore,
 	};
 }
 

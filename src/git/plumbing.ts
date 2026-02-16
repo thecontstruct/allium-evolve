@@ -7,7 +7,8 @@ export interface CreateAlliumCommitOpts {
 	repoPath: string;
 	originalSha: string;
 	parentShas: string[];
-	specContent: string;
+	specContent?: string;
+	specFiles?: Map<string, string>;
 	changelogContent: string;
 	commitMessage: string;
 	segmentId?: string;
@@ -25,34 +26,40 @@ async function hashObject(repoPath: string, content: string, env: Record<string,
 }
 
 export async function createAlliumCommit(opts: CreateAlliumCommitOpts): Promise<string> {
-	const { repoPath, originalSha, parentShas, specContent, changelogContent, commitMessage } = opts;
+	const { repoPath, originalSha, parentShas, specContent, specFiles, changelogContent, commitMessage } = opts;
 
 	const tempIndex = join(repoPath, ".git", `index.allium.${randomBytes(8).toString("hex")}`);
 	const env = { ...process.env, GIT_INDEX_FILE: tempIndex };
 
 	try {
-		// 1. Get tree from original commit
 		const treeSha = await getTreeSha(repoPath, originalSha);
-
-		// 2. Read original tree into temp index
 		await exec(`git read-tree ${treeSha}`, { cwd: repoPath, env });
 
-		// 3. Hash spec and changelog blobs
-		const specBlobSha = await hashObject(repoPath, specContent, env);
-		const changelogBlobSha = await hashObject(repoPath, changelogContent, env);
+		if (specFiles && specFiles.size > 0) {
+			for (const [filePath, content] of specFiles) {
+				const blobSha = await hashObject(repoPath, content, env);
+				await exec(`git update-index --add --cacheinfo 100644,${blobSha},${filePath}`, {
+					cwd: repoPath,
+					env,
+				});
+			}
+		} else if (specContent !== undefined) {
+			const specBlobSha = await hashObject(repoPath, specContent, env);
+			await exec(`git update-index --add --cacheinfo 100644,${specBlobSha},spec.allium`, {
+				cwd: repoPath,
+				env,
+			});
+		}
 
-		// 4. Add blobs to temp index
-		await exec(`git update-index --add --cacheinfo 100644,${specBlobSha},spec.allium`, { cwd: repoPath, env });
+		const changelogBlobSha = await hashObject(repoPath, changelogContent, env);
 		await exec(`git update-index --add --cacheinfo 100644,${changelogBlobSha},allium-changelog.md`, {
 			cwd: repoPath,
 			env,
 		});
 
-		// 5. Write tree from temp index
 		const { stdout: treeOut } = await exec("git write-tree", { cwd: repoPath, env });
 		const newTreeSha = treeOut.trim();
 
-		// 6. Create commit with parent(s)
 		const parentFlags = parentShas.map((p) => `-p ${p}`).join(" ");
 		const { stdout: commitOut } = await exec(
 			`git commit-tree ${newTreeSha} ${parentFlags} -m "${commitMessage.replace(/"/g, '\\"')}"`,

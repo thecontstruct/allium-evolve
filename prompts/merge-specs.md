@@ -17,6 +17,13 @@ Before proceeding:
 
 {mergeDiff}
 
+## Specification Structure
+
+The specification may be a single document or a modular spec with a master
+and module specs. When modular, each spec represents a bounded context.
+Your reconciliation should produce a unified master spec that incorporates
+all domain concepts from both trunk and branch.
+
 ## Instructions
 
 Reconcile these two specifications that evolved independently.
