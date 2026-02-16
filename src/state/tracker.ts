@@ -2,7 +2,13 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { EvolutionConfig } from "../config.js";
 import type { Segment } from "../dag/types.js";
-import type { CompletedMerge, CompletedStep, EvolutionState, SegmentProgress } from "./types.js";
+import type {
+	CompletedMerge,
+	CompletedReconciliation,
+	CompletedStep,
+	EvolutionState,
+	SegmentProgress,
+} from "./types.js";
 
 export class StateTracker {
 	private state!: EvolutionState;
@@ -36,6 +42,10 @@ export class StateTracker {
 			alliumBranchHead: "",
 			totalCostUsd: 0,
 			totalSteps: 0,
+			reconciliations: [],
+			lastReconciliationStep: 0,
+			lastReconciliationSha: undefined,
+			cumulativeDiffTokensSinceLastReconciliation: 0,
 		};
 	}
 
@@ -95,6 +105,30 @@ export class StateTracker {
 
 	updateBranchHead(sha: string): void {
 		this.state.alliumBranchHead = sha;
+	}
+
+	recordReconciliation(reconciliation: CompletedReconciliation, sha: string): void {
+		this.state.reconciliations.push(reconciliation);
+		this.state.lastReconciliationStep = this.state.totalSteps;
+		this.state.lastReconciliationSha = sha;
+		this.state.cumulativeDiffTokensSinceLastReconciliation = 0;
+		this.state.totalCostUsd += reconciliation.costUsd;
+	}
+
+	addDiffTokens(tokens: number): void {
+		this.state.cumulativeDiffTokensSinceLastReconciliation += tokens;
+	}
+
+	getReconciliationState(): {
+		lastStep: number;
+		lastSha: string | undefined;
+		cumulativeDiffTokens: number;
+	} {
+		return {
+			lastStep: this.state.lastReconciliationStep,
+			lastSha: this.state.lastReconciliationSha,
+			cumulativeDiffTokens: this.state.cumulativeDiffTokensSinceLastReconciliation,
+		};
 	}
 
 	getState(): Readonly<EvolutionState> {

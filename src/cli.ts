@@ -22,6 +22,8 @@ program
 	.option("--parallel-branches", "Enable parallel branch processing (default)", true)
 	.option("--no-parallel-branches", "Disable parallel branch processing")
 	.option("--allium-skills-path <path>", "Path to Allium skills directory")
+	.option("--reconciliation-strategy <strategy>", "Reconciliation strategy (none, n-commits, n-trunk-commits, token-count)", "n-trunk-commits")
+	.option("--reconciliation-interval <n>", "Reconciliation interval (commits or token threshold)", "50")
 	.action(async (opts) => {
 		const config: EvolutionConfig = defaultConfig({
 			repoPath: opts.repo,
@@ -37,6 +39,10 @@ program
 			stateFile: opts.stateFile,
 			alliumBranch: opts.alliumBranch,
 			alliumSkillsPath: opts.alliumSkillsPath,
+			reconciliation: {
+				strategy: opts.reconciliationStrategy,
+				interval: Number.parseInt(opts.reconciliationInterval, 10),
+			},
 		});
 
 		try {

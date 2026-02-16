@@ -24,6 +24,16 @@ export interface CompletedMerge {
 	timestamp: string;
 }
 
+export interface CompletedReconciliation {
+	atStep: number;
+	atSha: string;
+	model: string;
+	costUsd: number;
+	findingsCount: number;
+	skipped: boolean;
+	timestamp: string;
+}
+
 export interface EvolutionState {
 	version: 1;
 	repoPath: string;
@@ -37,4 +47,8 @@ export interface EvolutionState {
 	alliumBranchHead: string;
 	totalCostUsd: number;
 	totalSteps: number;
+	reconciliations: CompletedReconciliation[];
+	lastReconciliationStep: number;
+	lastReconciliationSha: string | undefined;
+	cumulativeDiffTokensSinceLastReconciliation: number;
 }

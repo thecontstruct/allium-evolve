@@ -4,37 +4,37 @@ overview: Add pluggable reconciliation checkpoints with recursive source analysi
 todos:
   - id: scheduler-interface
     content: "Phase 1: Create src/reconciliation/scheduler.ts with ReconciliationScheduler interface + context type + factory"
-    status: pending
+    status: completed
   - id: scheduler-n-commits
     content: "Phase 1: Create src/reconciliation/schedulers/n-commits.ts"
-    status: pending
+    status: completed
   - id: scheduler-n-trunk
     content: "Phase 1: Create src/reconciliation/schedulers/n-trunk-commits.ts"
-    status: pending
+    status: completed
   - id: scheduler-token
     content: "Phase 1: Create src/reconciliation/schedulers/token-count.ts"
-    status: pending
+    status: completed
   - id: source-reader
     content: "Phase 1: Create src/reconciliation/source-reader.ts with recursive chunking"
-    status: pending
+    status: completed
   - id: prompts
     content: "Phase 1: Create prompts/reconcile-chunk.md and prompts/reconcile-combine.md"
-    status: pending
+    status: completed
   - id: runner
     content: "Phase 1: Create src/reconciliation/runner.ts with recursive sub-agent dispatch"
-    status: pending
+    status: completed
   - id: config-recon
     content: "Phase 1: Add reconciliation config to EvolutionConfig, defaultConfig, CLI flags"
-    status: pending
+    status: completed
   - id: state-recon
     content: "Phase 1: Add reconciliation tracking to state types and StateTracker"
-    status: pending
+    status: completed
   - id: integrate-recon
     content: "Phase 1: Wire reconciliation into segment-runner.ts step loop"
-    status: pending
+    status: completed
   - id: tests-recon
     content: "Phase 1: Unit tests for schedulers, source-reader; integration test with fixture"
-    status: pending
+    status: in_progress
   - id: spec-store
     content: "Phase 2: Create src/spec/store.ts — SpecStore abstraction over multi-file spec tree"
     status: pending

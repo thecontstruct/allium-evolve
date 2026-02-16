@@ -7,6 +7,9 @@ import { type ClaudeResult, invokeClaudeForChunk, invokeClaudeForStep } from "..
 import type { EvolutionConfig } from "../config.js";
 import type { CommitNode, Segment } from "../dag/types.js";
 import { createAlliumCommit, updateRef } from "../git/plumbing.js";
+import type { ReconciliationScheduler, ReconciliationContext } from "../reconciliation/scheduler.js";
+import { runReconciliation } from "../reconciliation/runner.js";
+import type { StateTracker } from "../state/tracker.js";
 import type { CompletedStep } from "../state/types.js";
 import { chunkDiff } from "./diff-chunker.js";
 import { advance, createWindow, seedWindow, type WindowState } from "./window.js";
@@ -49,9 +52,23 @@ export async function runSegment(opts: {
 	parentAlliumSha: string | null;
 	trunkContextShas?: string[];
 	onStepComplete?: StepCallback;
+	scheduler?: ReconciliationScheduler;
+	stateTracker?: StateTracker;
+	trunkStepsCompleted?: number;
 }): Promise<SegmentRunnerResult> {
-	const { segment, config, dag, initialSpec, initialChangelog, parentAlliumSha, trunkContextShas, onStepComplete } =
-		opts;
+	const {
+		segment,
+		config,
+		dag,
+		initialSpec,
+		initialChangelog,
+		parentAlliumSha,
+		trunkContextShas,
+		onStepComplete,
+		scheduler,
+		stateTracker,
+	} = opts;
+	let trunkStepsCompleted = opts.trunkStepsCompleted ?? 0;
 
 	let windowState: WindowState = createWindow(config.windowSize, config.processDepth);
 
@@ -71,30 +88,95 @@ export async function runSegment(opts: {
 		const stepType: StepType = isInitial ? "initial-commit" : "evolve";
 		const model = getModelForStep(stepType, config);
 
-		const result = await processStep({
-			commitSha,
-			stepType,
-			model,
+		const context = await assembleContext({
 			windowState,
 			dag,
-			config,
-			currentSpec,
+			repoPath: config.repoPath,
+			prevSpec: currentSpec,
 		});
+
+		const result =
+			context.totalDiffTokens > config.maxDiffTokens
+				? await processChunkedStep(
+						{ commitSha, stepType, model, windowState, dag, config, currentSpec },
+						context.fullDiffs,
+					)
+				: await processStepFromContext(
+						{ commitSha, stepType, model, config },
+						context,
+					);
 
 		currentSpec = result.spec;
 		const changelogEntry = `\n${result.changelog}\n`;
 		currentChangelog += changelogEntry;
 
+		if (stateTracker) {
+			stateTracker.addDiffTokens(context.totalDiffTokens);
+		}
+		if (segment.type === "trunk") {
+			trunkStepsCompleted++;
+		}
+
+		let reconciliationMeta = "";
+		if (scheduler && stateTracker) {
+			const reconState = stateTracker.getReconciliationState();
+			const reconCtx: ReconciliationContext = {
+				totalStepsCompleted: stateTracker.getState().totalSteps + completedSteps.length + 1,
+				trunkStepsCompleted,
+				cumulativeDiffTokensSinceLastReconciliation: reconState.cumulativeDiffTokens,
+				segmentType: segment.type,
+				lastReconciliationStep: reconState.lastStep,
+			};
+
+			if (scheduler.shouldReconcile(reconCtx)) {
+				const reconResult = await runReconciliation({
+					currentSpec,
+					commitSha,
+					config,
+					lastReconciliationSha: reconState.lastSha,
+				});
+
+				stateTracker.recordReconciliation(
+					{
+						atStep: reconCtx.totalStepsCompleted,
+						atSha: commitSha,
+						model: config.reconciliation.model ?? config.opusModel,
+						costUsd: reconResult.costUsd,
+						findingsCount: reconResult.findings.length,
+						skipped: reconResult.skipped,
+						timestamp: new Date().toISOString(),
+					},
+					commitSha,
+				);
+
+				if (!reconResult.skipped && reconResult.findings.length > 0) {
+					currentSpec = reconResult.updatedSpec;
+					if (reconResult.changelog) {
+						currentChangelog += `\n${reconResult.changelog}\n`;
+					}
+					reconciliationMeta = [
+						`Reconciliation: source-grounded at ${commitSha.slice(0, 8)}`,
+						`Findings: ${reconResult.findings.length} changes`,
+						`Reconciliation cost: $${reconResult.costUsd.toFixed(4)}`,
+					].join("\n");
+				}
+			}
+		}
+
 		const node = dag.get(commitSha);
 		const originalMessage = node?.message ?? "";
 		const windowCommits = windowState.commits;
-		const commitMessage = [
+		const commitMessageParts = [
 			`allium: ${result.commitMessage}`,
 			"",
 			`Original: ${commitSha} "${originalMessage}"`,
 			`Window: ${windowCommits[0]?.slice(0, 8) ?? ""}..${windowCommits[windowCommits.length - 1]?.slice(0, 8) ?? ""}`,
 			`Model: ${model}`,
-		].join("\n");
+		];
+		if (reconciliationMeta) {
+			commitMessageParts.push("", reconciliationMeta);
+		}
+		const commitMessage = commitMessageParts.join("\n");
 
 		const parentShas = tipAlliumSha ? [tipAlliumSha] : [];
 		const alliumSha = await createAlliumCommit({
@@ -135,27 +217,16 @@ export async function runSegment(opts: {
 	};
 }
 
-async function processStep(opts: {
-	commitSha: string;
-	stepType: StepType;
-	model: string;
-	windowState: WindowState;
-	dag: Map<string, CommitNode>;
-	config: EvolutionConfig;
-	currentSpec: string;
-}): Promise<ClaudeResult> {
-	const { commitSha, stepType, model, windowState, dag, config, currentSpec } = opts;
-
-	const context = await assembleContext({
-		windowState,
-		dag,
-		repoPath: config.repoPath,
-		prevSpec: currentSpec,
-	});
-
-	if (context.totalDiffTokens > config.maxDiffTokens) {
-		return processChunkedStep(opts, context.fullDiffs);
-	}
+async function processStepFromContext(
+	opts: {
+		commitSha: string;
+		stepType: StepType;
+		model: string;
+		config: EvolutionConfig;
+	},
+	context: { prevSpec: string; contextCommits: string; fullDiffs: string },
+): Promise<ClaudeResult> {
+	const { stepType, model, config } = opts;
 
 	const templateName = stepType === "initial-commit" ? "initial-commit" : "evolve-step";
 	const template = await loadPromptTemplate(templateName);

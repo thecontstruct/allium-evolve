@@ -1,5 +1,10 @@
 import { exec } from "../utils/exec.js";
-import { parseChunkResponse, parseClaudeResponse, validateResponse } from "./parser.js";
+import {
+	parseChunkResponse,
+	parseClaudeResponse,
+	parseReconcileChunkResponse,
+	validateResponse,
+} from "./parser.js";
 
 export interface ClaudeResult {
 	spec: string;
@@ -111,7 +116,61 @@ export async function invokeClaudeForChunk(opts: InvokeClaudeOpts): Promise<Clau
 	return {
 		specPatch: parsed.specPatch,
 		sectionsChanged: parsed.sectionsChanged,
-		sessionId: "", // chunk responses don't track session individually
-		costUsd: 0, // cost tracked at recombine level
+		sessionId: "",
+		costUsd: 0,
 	};
+}
+
+export interface ReconciliationFinding {
+	type: "addition" | "removal" | "modification";
+	specSection: string;
+	description: string;
+	sourcePaths: string[];
+}
+
+export interface ReconcileChunkResult {
+	findings: ReconciliationFinding[];
+	sectionsAffected: string[];
+	costUsd: number;
+}
+
+const RECONCILE_CHUNK_SCHEMA = JSON.stringify({
+	type: "object",
+	properties: {
+		findings: {
+			type: "array",
+			items: {
+				type: "object",
+				properties: {
+					type: { type: "string", enum: ["addition", "removal", "modification"] },
+					specSection: { type: "string" },
+					description: { type: "string" },
+					sourcePaths: { type: "array", items: { type: "string" } },
+				},
+				required: ["type", "specSection", "description", "sourcePaths"],
+			},
+		},
+		sectionsAffected: { type: "array", items: { type: "string" } },
+	},
+	required: ["findings", "sectionsAffected"],
+});
+
+export async function invokeClaudeForReconcileChunk(opts: InvokeClaudeOpts): Promise<ReconcileChunkResult> {
+	const command = buildClaudeCommand(opts, RECONCILE_CHUNK_SCHEMA);
+	const fullPrompt = `${opts.systemPrompt}\n\n${opts.userPrompt}`;
+	const escapedPrompt = fullPrompt.replace(/'/g, "'\\''");
+
+	const { stdout } = await exec(`echo '${escapedPrompt}' | ${command}`, { cwd: opts.workingDirectory });
+
+	const parsed = parseReconcileChunkResponse(stdout);
+
+	return {
+		findings: parsed.findings,
+		sectionsAffected: parsed.sectionsAffected,
+		costUsd: parsed.costUsd,
+	};
+}
+
+export async function invokeClaudeForReconcileCombine(opts: InvokeClaudeOpts): Promise<ClaudeResult> {
+	return invokeClaudeForStep(opts);
 }

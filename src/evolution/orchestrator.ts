@@ -4,6 +4,7 @@ import { decompose } from "../dag/segments.js";
 import { identifyTrunk } from "../dag/trunk.js";
 import type { CommitNode, Segment } from "../dag/types.js";
 import { updateRef } from "../git/plumbing.js";
+import { createScheduler, type ReconciliationScheduler } from "../reconciliation/scheduler.js";
 import { StateTracker } from "../state/tracker.js";
 import type { CompletedStep } from "../state/types.js";
 import { runMerge } from "./merge-runner.js";
@@ -39,11 +40,16 @@ export async function runEvolution(config: EvolutionConfig): Promise<void> {
 	}
 
 	const segmentResults = new Map<string, SegmentRunnerResult>();
+	const scheduler = createScheduler(config);
+
+	if (config.reconciliation.strategy !== "none") {
+		console.error(`[allium-evolve] Reconciliation: ${config.reconciliation.strategy} (interval: ${config.reconciliation.interval})`);
+	}
 
 	if (config.parallelBranches) {
-		await runParallel(config, dag, segments, stateTracker, segmentResults);
+		await runParallel(config, dag, segments, stateTracker, segmentResults, scheduler);
 	} else {
-		await runSequential(config, dag, segments, stateTracker, segmentResults);
+		await runSequential(config, dag, segments, stateTracker, segmentResults, scheduler);
 	}
 
 	const state = stateTracker.getState();
@@ -59,9 +65,10 @@ async function runSequential(
 	segments: Segment[],
 	stateTracker: StateTracker,
 	segmentResults: Map<string, SegmentRunnerResult>,
+	scheduler: ReconciliationScheduler,
 ): Promise<void> {
 	for (const segment of segments) {
-		await processSegmentOrMerge(config, dag, segment, segments, stateTracker, segmentResults);
+		await processSegmentOrMerge(config, dag, segment, segments, stateTracker, segmentResults, scheduler);
 	}
 }
 
@@ -71,6 +78,7 @@ async function runParallel(
 	segments: Segment[],
 	stateTracker: StateTracker,
 	segmentResults: Map<string, SegmentRunnerResult>,
+	scheduler: ReconciliationScheduler,
 ): Promise<void> {
 	const completed = new Set<string>();
 	const inProgress = new Map<string, Promise<void>>();
@@ -81,7 +89,7 @@ async function runParallel(
 
 	async function processAndTrack(seg: Segment): Promise<void> {
 		try {
-			await processSegmentOrMerge(config, dag, seg, segments, stateTracker, segmentResults);
+			await processSegmentOrMerge(config, dag, seg, segments, stateTracker, segmentResults, scheduler);
 			completed.add(seg.id);
 		} catch (err) {
 			stateTracker.updateSegmentStatus(seg.id, "failed");
@@ -125,6 +133,7 @@ async function processSegmentOrMerge(
 	allSegments: Segment[],
 	stateTracker: StateTracker,
 	segmentResults: Map<string, SegmentRunnerResult>,
+	scheduler: ReconciliationScheduler,
 ): Promise<void> {
 	const progress = stateTracker.getSegmentProgress(segment.id);
 	if (progress?.status === "complete") {
@@ -141,9 +150,9 @@ async function processSegmentOrMerge(
 	const isMergeStart = firstCommit && firstCommit.parents.length > 1 && segment.type === "trunk";
 
 	if (isMergeStart) {
-		await handleMergeAndSegment(config, dag, segment, allSegments, stateTracker, segmentResults);
+		await handleMergeAndSegment(config, dag, segment, allSegments, stateTracker, segmentResults, scheduler);
 	} else {
-		await handleSegment(config, dag, segment, stateTracker, segmentResults);
+		await handleSegment(config, dag, segment, stateTracker, segmentResults, scheduler);
 	}
 }
 
@@ -153,6 +162,7 @@ async function handleSegment(
 	segment: Segment,
 	stateTracker: StateTracker,
 	segmentResults: Map<string, SegmentRunnerResult>,
+	scheduler: ReconciliationScheduler,
 ): Promise<void> {
 	console.error(
 		`[allium-evolve] Processing segment: ${segment.id} (${segment.type}, ${segment.commits.length} commits)`,
@@ -205,6 +215,8 @@ async function handleSegment(
 			stateTracker.recordStep(segment.id, step, spec, changelog);
 			await stateTracker.save();
 		},
+		scheduler,
+		stateTracker,
 	});
 
 	segmentResults.set(segment.id, result);
@@ -226,6 +238,7 @@ async function handleMergeAndSegment(
 	allSegments: Segment[],
 	stateTracker: StateTracker,
 	segmentResults: Map<string, SegmentRunnerResult>,
+	scheduler: ReconciliationScheduler,
 ): Promise<void> {
 	const mergeSha = segment.commits[0]!;
 	const mergeNode = dag.get(mergeSha)!;
@@ -243,7 +256,7 @@ async function handleMergeAndSegment(
 		console.error(
 			`[allium-evolve] Merge ${mergeSha.slice(0, 8)} missing trunk or branch dep, treating as regular segment`,
 		);
-		await handleSegment(config, dag, segment, stateTracker, segmentResults);
+		await handleSegment(config, dag, segment, stateTracker, segmentResults, scheduler);
 		return;
 	}
 
@@ -317,6 +330,8 @@ async function handleMergeAndSegment(
 				stateTracker.recordStep(segment.id, step, spec, changelog);
 				await stateTracker.save();
 			},
+			scheduler,
+			stateTracker,
 		});
 
 		currentSpec = subResult.currentSpec;

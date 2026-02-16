@@ -79,6 +79,32 @@ export function parseChunkResponse(rawOutput: string): ParsedChunkResponse {
 	};
 }
 
+export interface ReconcileFinding {
+	type: "addition" | "removal" | "modification";
+	specSection: string;
+	description: string;
+	sourcePaths: string[];
+}
+
+export interface ParsedReconcileChunkResponse {
+	findings: ReconcileFinding[];
+	sectionsAffected: string[];
+	costUsd: number;
+}
+
+export function parseReconcileChunkResponse(rawOutput: string): ParsedReconcileChunkResponse {
+	const envelope = parseEnvelope(rawOutput);
+	const inner = envelope.structured_output
+		? (envelope.structured_output as { findings: ReconcileFinding[]; sectionsAffected: string[] })
+		: parseInnerJson<{ findings: ReconcileFinding[]; sectionsAffected: string[] }>(envelope.result);
+
+	return {
+		findings: inner.findings ?? [],
+		sectionsAffected: inner.sectionsAffected ?? [],
+		costUsd: envelope.total_cost_usd ?? envelope.cost_usd ?? 0,
+	};
+}
+
 export function validateResponse(parsed: ParsedClaudeResponse): {
 	valid: boolean;
 	errors: string[];
