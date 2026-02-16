@@ -132,7 +132,7 @@ export async function runSegment(opts: {
 		if (scheduler && stateTracker) {
 			const reconState = stateTracker.getReconciliationState();
 			const reconCtx: ReconciliationContext = {
-				totalStepsCompleted: stateTracker.getState().totalSteps + completedSteps.length + 1,
+				totalStepsCompleted: stateTracker.getState().totalSteps + 1,
 				trunkStepsCompleted,
 				cumulativeDiffTokensSinceLastReconciliation: reconState.cumulativeDiffTokens,
 				segmentType: segment.type,
