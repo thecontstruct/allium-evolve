@@ -103,38 +103,14 @@ export async function runSegment(opts: {
 			prevSpec: prevSpecForContext,
 		});
 
-		const result =
-			context.totalDiffTokens > config.maxDiffTokens
-				? await processChunkedStep(
-						{ commitSha, stepType, model, windowState, dag, config, currentSpec },
-						context.fullDiffs,
-					)
-				: await processStepFromContext(
-						{ commitSha, stepType, model, config },
-						context,
-					);
-
-		currentSpec = result.spec;
-		if (specStore) {
-			specStore.setMasterSpec(result.spec);
-		}
-		const changelogEntry = `\n${result.changelog}\n`;
-		currentChangelog += changelogEntry;
-
-		if (stateTracker) {
-			stateTracker.addDiffTokens(context.totalDiffTokens);
-		}
-		if (segment.type === "trunk") {
-			trunkStepsCompleted++;
-		}
-
 		let reconciliationMeta = "";
 		if (scheduler && stateTracker) {
 			const reconState = stateTracker.getReconciliationState();
+			const upcomingTotal = reconState.cumulativeDiffTokens + context.totalDiffTokens;
 			const reconCtx: ReconciliationContext = {
-				totalStepsCompleted: stateTracker.getState().totalSteps + 1,
+				totalStepsCompleted: stateTracker.getState().totalSteps + completedSteps.length + 1,
 				trunkStepsCompleted,
-				cumulativeDiffTokensSinceLastReconciliation: reconState.cumulativeDiffTokens,
+				cumulativeDiffTokensSinceLastReconciliation: upcomingTotal,
 				segmentType: segment.type,
 				lastReconciliationStep: reconState.lastStep,
 			};
@@ -162,6 +138,9 @@ export async function runSegment(opts: {
 
 				if (!reconResult.skipped && reconResult.findings.length > 0) {
 					currentSpec = reconResult.updatedSpec;
+					if (specStore) {
+						specStore.setMasterSpec(currentSpec);
+					}
 					if (reconResult.changelog) {
 						currentChangelog += `\n${reconResult.changelog}\n`;
 					}
@@ -170,8 +149,38 @@ export async function runSegment(opts: {
 						`Findings: ${reconResult.findings.length} changes`,
 						`Reconciliation cost: $${reconResult.costUsd.toFixed(4)}`,
 					].join("\n");
+
+					const reconPrevSpec = specStore && specStore.getAllModules().size > 0
+						? assembleModuleSpec(specStore, [commitSha])
+						: currentSpec;
+					context.prevSpec = reconPrevSpec;
 				}
 			}
+		}
+
+		const result =
+			context.totalDiffTokens > config.maxDiffTokens
+				? await processChunkedStep(
+						{ commitSha, stepType, model, windowState, dag, config, currentSpec },
+						context.fullDiffs,
+					)
+				: await processStepFromContext(
+						{ commitSha, stepType, model, config },
+						context,
+					);
+
+		currentSpec = result.spec;
+		if (specStore) {
+			specStore.setMasterSpec(result.spec);
+		}
+		const changelogEntry = `\n${result.changelog}\n`;
+		currentChangelog += changelogEntry;
+
+		if (stateTracker) {
+			stateTracker.addDiffTokens(context.totalDiffTokens);
+		}
+		if (segment.type === "trunk") {
+			trunkStepsCompleted++;
 		}
 
 		const node = dag.get(commitSha);
