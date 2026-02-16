@@ -92,10 +92,10 @@ describe("Orchestrator – parallel mode", () => {
 			}
 		});
 
-		it("should have 15 total steps", async () => {
+		it("should have 30 total steps", async () => {
 			const raw = await readFile(stateFilePath, "utf-8");
 			const state = JSON.parse(raw);
-			expect(state.totalSteps).toBe(15);
+			expect(state.totalSteps).toBe(30);
 		});
 	});
 

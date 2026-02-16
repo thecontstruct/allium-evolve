@@ -42,8 +42,8 @@ describe("dag module", () => {
 
 	// ── UNIT-004 ────────────────────────────────────────────────────────
 	describe("UNIT-004: buildDag produces correct CommitNode map", () => {
-		it("should contain all 15 commits from fixture repo", () => {
-			expect(dag.size).toBe(15);
+		it("should contain all 30 commits from fixture repo", () => {
+			expect(dag.size).toBe(30);
 		});
 
 		it("should produce valid CommitNode objects", () => {
@@ -69,12 +69,15 @@ describe("dag module", () => {
 
 	// ── UNIT-005 ────────────────────────────────────────────────────────
 	describe("UNIT-005: identifyTrunk marks correct nodes as trunk", () => {
-		const trunkPrefixes = ["A:", "B:", "C:", "M1:", "D:", "E:", "M2:", "F:"];
+		const trunkPrefixes = [
+			"A:", "B:", "C:", "M1:", "D:", "E:", "M2:", "F:",
+			"G:", "H:", "I:", "J:", "K:", "L:", "M:", "N:", "O:", "P:", "Q:", "R:", "S:", "T:", "U:",
+		];
 		const nonTrunkPrefixes = ["X1:", "X2:", "Y1:", "Y2:", "Y3:", "Z1:", "Z2:"];
 
-		it("should mark exactly 8 commits as trunk", () => {
+		it("should mark exactly 23 commits as trunk", () => {
 			const trunkCount = [...dag.values()].filter((n) => n.isTrunk).length;
-			expect(trunkCount).toBe(8);
+			expect(trunkCount).toBe(23);
 		});
 
 		it.each(trunkPrefixes)("should mark %s as trunk", (prefix) => {
@@ -114,10 +117,13 @@ describe("dag module", () => {
 			expect(seg.commits).toEqual([sha("M1:"), sha("D:"), sha("E:")]);
 		});
 
-		it("third trunk segment contains M2, F in order", () => {
+		it("third trunk segment contains M2 through U in order", () => {
 			const seg = segmentContaining(sha("M2:"));
 			expect(seg.type).toBe("trunk");
-			expect(seg.commits).toEqual([sha("M2:"), sha("F:")]);
+			expect(seg.commits[0]).toBe(sha("M2:"));
+			expect(seg.commits[1]).toBe(sha("F:"));
+			expect(seg.commits[seg.commits.length - 1]).toBe(sha("U:"));
+			expect(seg.commits).toHaveLength(17);
 		});
 	});
 

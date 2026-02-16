@@ -13,8 +13,8 @@ describe("git/log.ts", () => {
 
 	describe("UNIT-001: Parse git log into CommitNode map", () => {
 		it("should parse all commits from the fixture repo", () => {
-			// Fixture has: A, B, C, X1, X2, Y1, Y2, Y3, M1, D, E, Z1, Z2, M2, F = 15
-			expect(nodes.size).toBe(15);
+			// Fixture has: A-F (original 15) + G-U (15 extended trunk) = 30
+			expect(nodes.size).toBe(30);
 		});
 
 		it("should include SHA, message, and parents for each node", () => {

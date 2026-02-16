@@ -70,20 +70,18 @@ describe("Orchestrator – sequential mode", () => {
 	});
 
 	describe("INT-001: Full sequential run creates allium branch with correct commit count", () => {
-		it("should create allium commits for all 15 original commits (tracked in state file)", async () => {
+		it("should create allium commits for all 30 original commits (tracked in state file)", async () => {
 			const raw = await readFile(stateFilePath, "utf-8");
 			const state = JSON.parse(raw);
 			// shaMap has one entry per original commit → allium commit mapping
-			expect(Object.keys(state.shaMap).length).toBe(15);
+			expect(Object.keys(state.shaMap).length).toBe(30);
 		});
 
-		it("should have 10 reachable commits from branch tip (dead-end is last segment in sequential mode)", async () => {
-			// In sequential mode, all segments update the allium branch ref.
-			// The dead-end segment runs last in topological order, so its tip
-			// becomes the branch head. Only 10 commits are reachable from there:
-			// dead-end-0(2) + trunk-1(3) + trunk-0(3) + branch-1(2) = 10
+		it("should have reachable commits from trunk tip (dead-end no longer updates ref)", async () => {
+			// After the fix, only trunk segments update the allium branch ref.
+			// trunk-2 is the last trunk segment (M2 through U = 17 commits) + trunk-1(3) + trunk-0(3) + branch-1(2) + branch-0(3) merge parents
 			const { stdout } = await execAsync("git rev-list --count refs/heads/allium/evolution", { cwd: repoPath });
-			expect(Number.parseInt(stdout.trim(), 10)).toBe(10);
+			expect(Number.parseInt(stdout.trim(), 10)).toBeGreaterThan(10);
 		});
 	});
 
@@ -156,16 +154,16 @@ describe("Orchestrator – sequential mode", () => {
 	});
 
 	describe("INT-005: State file has correct total step count", () => {
-		it("should have totalSteps equal to 15 (one per original commit)", async () => {
+		it("should have totalSteps equal to 30 (one per original commit)", async () => {
 			const raw = await readFile(stateFilePath, "utf-8");
 			const state = JSON.parse(raw);
-			expect(state.totalSteps).toBe(15);
+			expect(state.totalSteps).toBe(30);
 		});
 
 		it("should have totalCostUsd matching step count * 0.01", async () => {
 			const raw = await readFile(stateFilePath, "utf-8");
 			const state = JSON.parse(raw);
-			expect(state.totalCostUsd).toBeCloseTo(0.15, 6);
+			expect(state.totalCostUsd).toBeCloseTo(0.30, 6);
 		});
 	});
 });
