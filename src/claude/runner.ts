@@ -1,3 +1,7 @@
+import { randomBytes } from "node:crypto";
+import { unlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { exec } from "../utils/exec.js";
 import {
 	parseChunkResponse,
@@ -67,6 +71,21 @@ function buildClaudeCommand(opts: InvokeClaudeOpts, jsonSchema: string): string 
 	return args.join(" ");
 }
 
+async function invokeClaudeWithTempFile(
+	command: string,
+	prompt: string,
+	cwd: string,
+): Promise<string> {
+	const tmpFile = join(tmpdir(), `allium-prompt-${randomBytes(8).toString("hex")}.txt`);
+	await writeFile(tmpFile, prompt, "utf-8");
+	try {
+		const { stdout } = await exec(`${command} < "${tmpFile}"`, { cwd });
+		return stdout;
+	} finally {
+		await unlink(tmpFile).catch(() => {});
+	}
+}
+
 export async function invokeClaudeForStep(opts: InvokeClaudeOpts): Promise<ClaudeResult> {
 	const maxRetries = opts.maxRetries ?? 2;
 	let lastError: Error | null = null;
@@ -75,9 +94,8 @@ export async function invokeClaudeForStep(opts: InvokeClaudeOpts): Promise<Claud
 		try {
 			const command = buildClaudeCommand(opts, EVOLVE_JSON_SCHEMA);
 			const fullPrompt = `${opts.systemPrompt}\n\n${opts.userPrompt}`;
-			const escapedPrompt = fullPrompt.replace(/'/g, "'\\''");
 
-			const { stdout } = await exec(`echo '${escapedPrompt}' | ${command}`, { cwd: opts.workingDirectory });
+			const stdout = await invokeClaudeWithTempFile(command, fullPrompt, opts.workingDirectory);
 
 			const parsed = parseClaudeResponse(stdout);
 			const validation = validateResponse(parsed);
@@ -107,9 +125,8 @@ export async function invokeClaudeForStep(opts: InvokeClaudeOpts): Promise<Claud
 export async function invokeClaudeForChunk(opts: InvokeClaudeOpts): Promise<ClaudeChunkResult> {
 	const command = buildClaudeCommand(opts, CHUNK_JSON_SCHEMA);
 	const fullPrompt = `${opts.systemPrompt}\n\n${opts.userPrompt}`;
-	const escapedPrompt = fullPrompt.replace(/'/g, "'\\''");
 
-	const { stdout } = await exec(`echo '${escapedPrompt}' | ${command}`, { cwd: opts.workingDirectory });
+	const stdout = await invokeClaudeWithTempFile(command, fullPrompt, opts.workingDirectory);
 
 	const parsed = parseChunkResponse(stdout);
 
@@ -158,9 +175,8 @@ const RECONCILE_CHUNK_SCHEMA = JSON.stringify({
 export async function invokeClaudeForReconcileChunk(opts: InvokeClaudeOpts): Promise<ReconcileChunkResult> {
 	const command = buildClaudeCommand(opts, RECONCILE_CHUNK_SCHEMA);
 	const fullPrompt = `${opts.systemPrompt}\n\n${opts.userPrompt}`;
-	const escapedPrompt = fullPrompt.replace(/'/g, "'\\''");
 
-	const { stdout } = await exec(`echo '${escapedPrompt}' | ${command}`, { cwd: opts.workingDirectory });
+	const stdout = await invokeClaudeWithTempFile(command, fullPrompt, opts.workingDirectory);
 
 	const parsed = parseReconcileChunkResponse(stdout);
 
