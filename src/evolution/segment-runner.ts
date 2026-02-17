@@ -12,6 +12,7 @@ import {
 import type { EvolutionConfig } from "../config.js";
 import type { CommitNode, Segment } from "../dag/types.js";
 import { createAlliumCommit, updateRef } from "../git/plumbing.js";
+import type { ShutdownSignal } from "../shutdown.js";
 import type { SpecStore } from "../spec/store.js";
 import type { StateTracker } from "../state/tracker.js";
 import type { CompletedStep, SegmentProgress } from "../state/types.js";
@@ -59,6 +60,7 @@ export async function runSegment(opts: {
 	stateTracker?: StateTracker;
 	specStore?: SpecStore;
 	existingProgress?: SegmentProgress;
+	shutdownSignal?: ShutdownSignal;
 }): Promise<SegmentRunnerResult> {
 	const {
 		segment,
@@ -71,6 +73,7 @@ export async function runSegment(opts: {
 		onStepComplete,
 		stateTracker,
 		specStore,
+		shutdownSignal,
 	} = opts;
 	let existingProgress = opts.existingProgress;
 
@@ -129,6 +132,8 @@ export async function runSegment(opts: {
 			completedSteps.push(existingStep);
 			continue;
 		}
+
+		shutdownSignal?.assertContinue();
 
 		windowState = advance(windowState, commitSha);
 

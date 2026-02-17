@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import { defaultConfig, type EvolutionConfig } from "./config.js";
 import { runEvolution } from "./evolution/orchestrator.js";
+import { GracefulShutdownError, ShutdownSignal } from "./shutdown.js";
 
 const program = new Command();
 
@@ -45,11 +46,27 @@ program
 			},
 		});
 
+		const shutdownSignal = new ShutdownSignal();
+		let forceExit = false;
+		process.on("SIGINT", () => {
+			if (forceExit) {
+				console.error("[allium-evolve] Force shutdown.");
+				process.exit(1);
+			}
+			shutdownSignal.request();
+			forceExit = true;
+		});
+
 		try {
-			await runEvolution(config);
+			await runEvolution(config, shutdownSignal);
 			process.exit(0);
 			return;
 		} catch (err) {
+			if (err instanceof GracefulShutdownError) {
+				console.error("[allium-evolve] Graceful shutdown complete. State saved — safe to resume.");
+				process.exit(0);
+				return;
+			}
 			console.error("Evolution failed:", err);
 			process.exit(1);
 			return;

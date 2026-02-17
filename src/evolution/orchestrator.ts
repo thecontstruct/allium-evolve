@@ -4,12 +4,13 @@ import { decompose } from "../dag/segments.js";
 import { identifyTrunk } from "../dag/trunk.js";
 import type { CommitNode, Segment } from "../dag/types.js";
 import { updateRef } from "../git/plumbing.js";
+import type { ShutdownSignal } from "../shutdown.js";
 import { StateTracker } from "../state/tracker.js";
 import type { CompletedStep, SegmentProgress } from "../state/types.js";
 import { runMerge } from "./merge-runner.js";
 import { runSegment, type SegmentRunnerResult } from "./segment-runner.js";
 
-export async function runEvolution(config: EvolutionConfig): Promise<void> {
+export async function runEvolution(config: EvolutionConfig, shutdownSignal?: ShutdownSignal): Promise<void> {
 	console.error(`[allium-evolve] Starting evolution for ${config.repoPath}`);
 	console.error(`[allium-evolve] Target ref: ${config.targetRef}`);
 	console.error(`[allium-evolve] Parallel branches: ${config.parallelBranches}`);
@@ -41,9 +42,9 @@ export async function runEvolution(config: EvolutionConfig): Promise<void> {
 	const segmentResults = new Map<string, SegmentRunnerResult>();
 
 	if (config.parallelBranches) {
-		await runParallel(config, dag, segments, stateTracker, segmentResults);
+		await runParallel(config, dag, segments, stateTracker, segmentResults, shutdownSignal);
 	} else {
-		await runSequential(config, dag, segments, stateTracker, segmentResults);
+		await runSequential(config, dag, segments, stateTracker, segmentResults, shutdownSignal);
 	}
 
 	const state = stateTracker.getState();
@@ -59,9 +60,11 @@ async function runSequential(
 	segments: Segment[],
 	stateTracker: StateTracker,
 	segmentResults: Map<string, SegmentRunnerResult>,
+	shutdownSignal?: ShutdownSignal,
 ): Promise<void> {
 	for (const segment of segments) {
-		await processSegmentOrMerge(config, dag, segment, segments, stateTracker, segmentResults);
+		shutdownSignal?.assertContinue();
+		await processSegmentOrMerge(config, dag, segment, segments, stateTracker, segmentResults, shutdownSignal);
 	}
 }
 
@@ -71,6 +74,7 @@ async function runParallel(
 	segments: Segment[],
 	stateTracker: StateTracker,
 	segmentResults: Map<string, SegmentRunnerResult>,
+	shutdownSignal?: ShutdownSignal,
 ): Promise<void> {
 	const completed = new Set<string>();
 	const inProgress = new Map<string, Promise<void>>();
@@ -81,7 +85,7 @@ async function runParallel(
 
 	async function processAndTrack(seg: Segment): Promise<void> {
 		try {
-			await processSegmentOrMerge(config, dag, seg, segments, stateTracker, segmentResults);
+			await processSegmentOrMerge(config, dag, seg, segments, stateTracker, segmentResults, shutdownSignal);
 			completed.add(seg.id);
 		} catch (err) {
 			stateTracker.updateSegmentStatus(seg.id, "failed");
@@ -93,6 +97,13 @@ async function runParallel(
 	}
 
 	while (completed.size < segments.length) {
+		if (shutdownSignal?.requested) {
+			if (inProgress.size > 0) {
+				await Promise.allSettled(inProgress.values());
+			}
+			shutdownSignal.assertContinue();
+		}
+
 		const ready = segments.filter((s) => !completed.has(s.id) && !inProgress.has(s.id) && isReady(s));
 
 		if (ready.length === 0 && inProgress.size === 0) {
@@ -125,6 +136,7 @@ async function processSegmentOrMerge(
 	allSegments: Segment[],
 	stateTracker: StateTracker,
 	segmentResults: Map<string, SegmentRunnerResult>,
+	shutdownSignal?: ShutdownSignal,
 ): Promise<void> {
 	const progress = stateTracker.getSegmentProgress(segment.id);
 	if (progress?.status === "complete") {
@@ -141,9 +153,9 @@ async function processSegmentOrMerge(
 	const isMergeStart = firstCommit && firstCommit.parents.length > 1 && segment.type === "trunk";
 
 	if (isMergeStart) {
-		await handleMergeAndSegment(config, dag, segment, allSegments, stateTracker, segmentResults);
+		await handleMergeAndSegment(config, dag, segment, allSegments, stateTracker, segmentResults, shutdownSignal);
 	} else {
-		await handleSegment(config, dag, segment, stateTracker, segmentResults);
+		await handleSegment(config, dag, segment, stateTracker, segmentResults, shutdownSignal);
 	}
 }
 
@@ -153,6 +165,7 @@ async function handleSegment(
 	segment: Segment,
 	stateTracker: StateTracker,
 	segmentResults: Map<string, SegmentRunnerResult>,
+	shutdownSignal?: ShutdownSignal,
 ): Promise<void> {
 	console.error(
 		`[allium-evolve] Processing segment: ${segment.id} (${segment.type}, ${segment.commits.length} commits)`,
@@ -209,6 +222,7 @@ async function handleSegment(
 		},
 		stateTracker,
 		existingProgress,
+		shutdownSignal,
 	});
 
 	segmentResults.set(segment.id, result);
@@ -230,6 +244,7 @@ async function handleMergeAndSegment(
 	allSegments: Segment[],
 	stateTracker: StateTracker,
 	segmentResults: Map<string, SegmentRunnerResult>,
+	shutdownSignal?: ShutdownSignal,
 ): Promise<void> {
 	const mergeSha = segment.commits[0]!;
 
@@ -246,7 +261,7 @@ async function handleMergeAndSegment(
 		console.error(
 			`[allium-evolve] Merge ${mergeSha.slice(0, 8)} missing trunk or branch dep, treating as regular segment`,
 		);
-		await handleSegment(config, dag, segment, stateTracker, segmentResults);
+		await handleSegment(config, dag, segment, stateTracker, segmentResults, shutdownSignal);
 		return;
 	}
 
@@ -346,6 +361,8 @@ async function handleMergeAndSegment(
 	}
 
 	if (remainingCommits.length > 0) {
+		shutdownSignal?.assertContinue();
+
 		const subSegment: Segment = {
 			...segment,
 			commits: remainingCommits,
@@ -364,6 +381,7 @@ async function handleMergeAndSegment(
 			},
 			stateTracker,
 			existingProgress: filteredProgress,
+			shutdownSignal,
 		});
 
 		currentSpec = subResult.currentSpec;
