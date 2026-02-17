@@ -15,7 +15,7 @@ export async function runEvolution(config: EvolutionConfig): Promise<void> {
 	console.error(`[allium-evolve] Target ref: ${config.targetRef}`);
 	console.error(`[allium-evolve] Parallel branches: ${config.parallelBranches}`);
 
-	const dag = await buildDag(config.repoPath);
+	const dag = await buildDag(config.repoPath, config.targetRef);
 	await identifyTrunk(dag, config.repoPath, config.targetRef);
 	const segments = decompose(dag);
 

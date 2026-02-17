@@ -4,9 +4,10 @@ import { exec } from "../utils/exec.js";
 const FIELD_SEP = "<<SEP>>";
 const RECORD_SEP = "<<REC>>";
 
-export async function parseGitLog(repoPath: string): Promise<Map<string, CommitNode>> {
+export async function parseGitLog(repoPath: string, targetRef?: string): Promise<Map<string, CommitNode>> {
 	const format = ["%H", "%P", "%s", "%aI"].join(FIELD_SEP) + RECORD_SEP;
-	const { stdout } = await exec(`git log --all --format="${format}"`, { cwd: repoPath });
+	const refArg = targetRef ?? "--all";
+	const { stdout } = await exec(`git log ${refArg} --format="${format}"`, { cwd: repoPath });
 
 	const nodes = new Map<string, CommitNode>();
 	const records = stdout.split(RECORD_SEP).filter((r) => r.trim().length > 0);
