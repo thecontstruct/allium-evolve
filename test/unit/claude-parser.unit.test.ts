@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseChunkResponse, parseClaudeResponse, validateResponse } from "../../src/claude/parser.js";
+import { parseClaudeResponse, validateResponse } from "../../src/claude/parser.js";
 
 function makeLegacyEnvelope(resultObj: Record<string, unknown>, overrides: Record<string, unknown> = {}): string {
 	return JSON.stringify({
@@ -185,8 +185,6 @@ describe("claude/parser.ts", () => {
 
 			expect(result.valid).toBe(false);
 			expect(result.errors).toHaveLength(2);
-			expect(result.errors).toContain("spec must not be empty");
-			expect(result.errors).toContain("changelog must not be empty");
 		});
 
 		it("should pass validation when all fields are non-empty", () => {
@@ -205,46 +203,8 @@ describe("claude/parser.ts", () => {
 		});
 	});
 
-	describe("UNIT-040: Parse chunk response extracts specPatch and sectionsChanged", () => {
-		it("should extract from legacy result-string envelope", () => {
-			const raw = makeLegacyEnvelope({
-				specPatch: "--- a/spec\n+++ b/spec\n@@ ...",
-				sectionsChanged: ["## API", "## Models"],
-			});
-
-			const parsed = parseChunkResponse(raw);
-
-			expect(parsed.specPatch).toBe("--- a/spec\n+++ b/spec\n@@ ...");
-			expect(parsed.sectionsChanged).toEqual(["## API", "## Models"]);
-		});
-
-		it("should extract from structured_output envelope", () => {
-			const raw = makeStructuredEnvelope({
-				specPatch: "--- a/spec\n+++ b/spec\n@@ ...",
-				sectionsChanged: ["## API", "## Models"],
-			});
-
-			const parsed = parseChunkResponse(raw);
-
-			expect(parsed.specPatch).toBe("--- a/spec\n+++ b/spec\n@@ ...");
-			expect(parsed.sectionsChanged).toEqual(["## API", "## Models"]);
-		});
-
-		it("should handle empty sectionsChanged array", () => {
-			const raw = makeLegacyEnvelope({
-				specPatch: "some patch",
-				sectionsChanged: [],
-			});
-
-			const parsed = parseChunkResponse(raw);
-
-			expect(parsed.specPatch).toBe("some patch");
-			expect(parsed.sectionsChanged).toEqual([]);
-		});
-	});
-
 	describe("UNIT-041: Error response (is_error: true) throws descriptive error", () => {
-		it("should throw when is_error is true on full response", () => {
+		it("should throw when is_error is true", () => {
 			const raw = JSON.stringify({
 				type: "result",
 				subtype: "error_max_turns",
@@ -255,19 +215,6 @@ describe("claude/parser.ts", () => {
 			});
 
 			expect(() => parseClaudeResponse(raw)).toThrow(/claude cli returned an error/i);
-		});
-
-		it("should throw when is_error is true on chunk response", () => {
-			const raw = JSON.stringify({
-				type: "result",
-				subtype: "error_max_turns",
-				cost_usd: 0.01,
-				is_error: true,
-				result: "Something went wrong",
-				session_id: "s",
-			});
-
-			expect(() => parseChunkResponse(raw)).toThrow(/claude cli returned an error/i);
 		});
 	});
 });

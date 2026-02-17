@@ -5,17 +5,22 @@ Before proceeding:
 2. Consult `references/language-reference.md` for Allium syntax when needed
 3. Reference `SKILL.md` for a quick syntax overview
 
-## Current Specification
+## Context Files
 
-{prevSpec}
+The following files have been written for you to read:
 
-## Window Context (commit messages only)
+{contextManifest}
 
-{contextCommits}
+**Processing strategy:**
+1. Read `current-spec.allium` to understand the current domain model
+2. Read `context-commits.md` (if present) for recent commit message context
+3. Read `changes.diff` for the full diff to process
+4. If the diff is large, use Task sub-agents to analyze different packages
+   in parallel, then synthesize the results
+5. After producing the updated spec, re-read `current-spec.allium` to verify
+   no entities, rules, or relationships were lost
 
-## Changes to Process (full diffs)
-
-{fullDiffs}
+All context files persist across your turns — re-read them if needed.
 
 ## Specification Structure
 

@@ -1,26 +1,14 @@
 import { randomBytes } from "node:crypto";
-import { unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { exec } from "../utils/exec.js";
-import {
-	parseChunkResponse,
-	parseClaudeResponse,
-	parseReconcileChunkResponse,
-	validateResponse,
-} from "./parser.js";
+import { parseClaudeResponse, validateResponse } from "./parser.js";
 
 export interface ClaudeResult {
 	spec: string;
 	changelog: string;
 	commitMessage: string;
-	sessionId: string;
-	costUsd: number;
-}
-
-export interface ClaudeChunkResult {
-	specPatch: string;
-	sectionsChanged: string[];
 	sessionId: string;
 	costUsd: number;
 }
@@ -32,6 +20,7 @@ export interface InvokeClaudeOpts {
 	workingDirectory: string;
 	alliumSkillsPath: string;
 	maxRetries?: number;
+	maxTurns?: number;
 }
 
 const EVOLVE_JSON_SCHEMA = JSON.stringify({
@@ -44,25 +33,14 @@ const EVOLVE_JSON_SCHEMA = JSON.stringify({
 	required: ["spec", "changelog", "commitMessage"],
 });
 
-const CHUNK_JSON_SCHEMA = JSON.stringify({
-	type: "object",
-	properties: {
-		specPatch: { type: "string", description: "Spec patch describing changes to specific sections" },
-		sectionsChanged: {
-			type: "array",
-			items: { type: "string" },
-			description: "List of section names that were changed",
-		},
-	},
-	required: ["specPatch", "sectionsChanged"],
-});
-
 function buildClaudeCommand(opts: InvokeClaudeOpts, jsonSchema: string): string {
+	const maxTurns = opts.maxTurns ?? 75;
 	const args = [
 		"claude",
 		"-p",
 		`--model ${opts.model}`,
 		"--output-format json",
+		`--max-turns ${maxTurns}`,
 		`--json-schema '${jsonSchema}'`,
 		"--dangerously-skip-permissions",
 		`--add-dir "${opts.workingDirectory}"`,
@@ -84,6 +62,59 @@ async function invokeClaudeWithTempFile(
 	} finally {
 		await unlink(tmpFile).catch(() => {});
 	}
+}
+
+export interface ContextFilesResult {
+	dir: string;
+	manifest: string[];
+	cleanup: () => Promise<void>;
+}
+
+export async function writeContextFiles(
+	workingDir: string,
+	files: Record<string, string>,
+): Promise<ContextFilesResult> {
+	const id = randomBytes(8).toString("hex");
+	const dir = join(workingDir, ".allium-tmp", id);
+	await mkdir(dir, { recursive: true });
+
+	const manifest: string[] = [];
+	for (const [name, content] of Object.entries(files)) {
+		const filePath = join(dir, name);
+		const fileDir = join(dir, ...name.split("/").slice(0, -1));
+		if (fileDir !== dir) {
+			await mkdir(fileDir, { recursive: true });
+		}
+		await writeFile(filePath, content, "utf-8");
+		manifest.push(`.allium-tmp/${id}/${name}`);
+	}
+
+	const cleanup = async () => {
+		await rm(dir, { recursive: true, force: true }).catch(() => {});
+	};
+
+	return { dir, manifest, cleanup };
+}
+
+export async function cleanupStaleContextFiles(workingDir: string): Promise<void> {
+	const tmpDir = join(workingDir, ".allium-tmp");
+	try {
+		const entries = await readdir(tmpDir);
+		const oneHourAgo = Date.now() - 60 * 60 * 1000;
+		for (const entry of entries) {
+			const entryPath = join(tmpDir, entry);
+			const stats = await stat(entryPath).catch(() => null);
+			if (stats && stats.mtimeMs < oneHourAgo) {
+				await rm(entryPath, { recursive: true, force: true }).catch(() => {});
+			}
+		}
+	} catch {
+		// Directory doesn't exist, nothing to clean
+	}
+}
+
+export function formatManifest(manifest: string[]): string {
+	return manifest.map((f) => `- \`${f}\``).join("\n");
 }
 
 export async function invokeClaudeForStep(opts: InvokeClaudeOpts): Promise<ClaudeResult> {
@@ -120,73 +151,4 @@ export async function invokeClaudeForStep(opts: InvokeClaudeOpts): Promise<Claud
 	}
 
 	throw new Error(`Claude invocation failed after ${maxRetries + 1} attempts: ${lastError?.message}`);
-}
-
-export async function invokeClaudeForChunk(opts: InvokeClaudeOpts): Promise<ClaudeChunkResult> {
-	const command = buildClaudeCommand(opts, CHUNK_JSON_SCHEMA);
-	const fullPrompt = `${opts.systemPrompt}\n\n${opts.userPrompt}`;
-
-	const stdout = await invokeClaudeWithTempFile(command, fullPrompt, opts.workingDirectory);
-
-	const parsed = parseChunkResponse(stdout);
-
-	return {
-		specPatch: parsed.specPatch,
-		sectionsChanged: parsed.sectionsChanged,
-		sessionId: "",
-		costUsd: 0,
-	};
-}
-
-export interface ReconciliationFinding {
-	type: "addition" | "removal" | "modification";
-	specSection: string;
-	description: string;
-	sourcePaths: string[];
-}
-
-export interface ReconcileChunkResult {
-	findings: ReconciliationFinding[];
-	sectionsAffected: string[];
-	costUsd: number;
-}
-
-const RECONCILE_CHUNK_SCHEMA = JSON.stringify({
-	type: "object",
-	properties: {
-		findings: {
-			type: "array",
-			items: {
-				type: "object",
-				properties: {
-					type: { type: "string", enum: ["addition", "removal", "modification"] },
-					specSection: { type: "string" },
-					description: { type: "string" },
-					sourcePaths: { type: "array", items: { type: "string" } },
-				},
-				required: ["type", "specSection", "description", "sourcePaths"],
-			},
-		},
-		sectionsAffected: { type: "array", items: { type: "string" } },
-	},
-	required: ["findings", "sectionsAffected"],
-});
-
-export async function invokeClaudeForReconcileChunk(opts: InvokeClaudeOpts): Promise<ReconcileChunkResult> {
-	const command = buildClaudeCommand(opts, RECONCILE_CHUNK_SCHEMA);
-	const fullPrompt = `${opts.systemPrompt}\n\n${opts.userPrompt}`;
-
-	const stdout = await invokeClaudeWithTempFile(command, fullPrompt, opts.workingDirectory);
-
-	const parsed = parseReconcileChunkResponse(stdout);
-
-	return {
-		findings: parsed.findings,
-		sectionsAffected: parsed.sectionsAffected,
-		costUsd: parsed.costUsd,
-	};
-}
-
-export async function invokeClaudeForReconcileCombine(opts: InvokeClaudeOpts): Promise<ClaudeResult> {
-	return invokeClaudeForStep(opts);
 }

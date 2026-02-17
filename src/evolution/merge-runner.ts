@@ -2,10 +2,14 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getModelForStep } from "../claude/models.js";
-import { invokeClaudeForStep } from "../claude/runner.js";
+import {
+	invokeClaudeForStep,
+	writeContextFiles,
+	formatManifest,
+} from "../claude/runner.js";
 import type { EvolutionConfig } from "../config.js";
 import type { CommitNode } from "../dag/types.js";
-import { getDiff } from "../git/diff.js";
+import { getDiff, getDiffstat } from "../git/diff.js";
 import { createAlliumCommit } from "../git/plumbing.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -76,50 +80,62 @@ export async function runMerge(opts: {
 	const node = dag.get(mergeSha);
 	const parentSha = node?.parents[0] ?? null;
 	const mergeDiff = await getDiff(config.repoPath, parentSha, mergeSha);
+	const mergeDiffstat = await getDiffstat(config.repoPath, parentSha, mergeSha);
 
-	const template = await loadPromptTemplate("merge-specs");
-	const systemPrompt = fillTemplate(template, {
-		trunkSpec,
-		branchSpec,
-		mergeDiff,
-	});
-
-	const model = getModelForStep("merge", config);
-	const result = await invokeClaudeForStep({
-		systemPrompt,
-		userPrompt: "Reconcile the two specifications and produce a unified version. Return JSON.",
-		model,
-		workingDirectory: config.repoPath,
-		alliumSkillsPath: config.alliumSkillsPath,
-		maxRetries: config.maxParseRetries,
-	});
-
-	const uniqueBranchEntries = extractUniqueEntries(trunkChangelog, branchChangelog);
-	const mergedChangelog =
-		trunkChangelog + uniqueBranchEntries + `\n## ${mergeSha.slice(0, 8)} (merge)\n\n${result.changelog}\n`;
-
-	const originalMessage = node?.message ?? "";
-	const commitMessage = [
-		`allium: ${result.commitMessage}`,
-		"",
-		`Original: ${mergeSha} "${originalMessage}"`,
-		`Merge: ${trunkSegmentId} + ${branchSegmentId}`,
-		`Model: ${model}`,
-	].join("\n");
-
-	const alliumSha = await createAlliumCommit({
-		repoPath: config.repoPath,
-		originalSha: mergeSha,
-		parentShas: [trunkAlliumSha, branchAlliumSha],
-		specContent: result.spec,
-		changelogContent: mergedChangelog,
-		commitMessage,
-	});
-
-	return {
-		alliumSha,
-		mergedSpec: result.spec,
-		mergedChangelog,
-		costUsd: result.costUsd,
+	const contextFiles: Record<string, string> = {
+		"trunk-spec.allium": trunkSpec,
+		"branch-spec.allium": branchSpec,
+		"merge.diff": mergeDiff,
+		"merge.diffstat": mergeDiffstat,
 	};
+
+	const ctx = await writeContextFiles(config.repoPath, contextFiles);
+
+	try {
+		const template = await loadPromptTemplate("merge-specs");
+		const systemPrompt = fillTemplate(template, {
+			contextManifest: formatManifest(ctx.manifest),
+		});
+
+		const model = getModelForStep("merge", config);
+		const result = await invokeClaudeForStep({
+			systemPrompt,
+			userPrompt: "Read the context files, reconcile the two specifications, and produce a unified version. Return JSON.",
+			model,
+			workingDirectory: config.repoPath,
+			alliumSkillsPath: config.alliumSkillsPath,
+			maxRetries: config.maxParseRetries,
+		});
+
+		const uniqueBranchEntries = extractUniqueEntries(trunkChangelog, branchChangelog);
+		const mergedChangelog =
+			trunkChangelog + uniqueBranchEntries + `\n## ${mergeSha.slice(0, 8)} (merge)\n\n${result.changelog}\n`;
+
+		const originalMessage = node?.message ?? "";
+		const commitMessage = [
+			`allium: ${result.commitMessage}`,
+			"",
+			`Original: ${mergeSha} "${originalMessage}"`,
+			`Merge: ${trunkSegmentId} + ${branchSegmentId}`,
+			`Model: ${model}`,
+		].join("\n");
+
+		const alliumSha = await createAlliumCommit({
+			repoPath: config.repoPath,
+			originalSha: mergeSha,
+			parentShas: [trunkAlliumSha, branchAlliumSha],
+			specContent: result.spec,
+			changelogContent: mergedChangelog,
+			commitMessage,
+		});
+
+		return {
+			alliumSha,
+			mergedSpec: result.spec,
+			mergedChangelog,
+			costUsd: result.costUsd,
+		};
+	} finally {
+		await ctx.cleanup();
+	}
 }

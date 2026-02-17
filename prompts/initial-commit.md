@@ -5,13 +5,23 @@ Before proceeding:
 2. Consult `references/language-reference.md` for Allium syntax
 3. Reference `SKILL.md` for a quick syntax overview
 
+## Context Files
+
+The following files have been written for you to read:
+
+{contextManifest}
+
+**Processing strategy:**
+1. Read `changes.diff` to see the initial codebase content
+2. If the diff is large, use Task sub-agents to analyze different packages
+   in parallel, then synthesize the results
+3. Focus on extracting domain entities, relationships, and behaviors
+
+All context files persist across your turns — re-read them if needed.
+
 ## Initial Commit Analysis
 
 This is the initial commit of a project. It may be bootstrapped from a SaaS starter template (such as supastarter). Your task is to extract the base domain model and produce the first Allium specification.
-
-## Changes
-
-{fullDiffs}
 
 ## Instructions
 

@@ -18,11 +18,6 @@ export interface ParsedClaudeResponse {
 	sessionId: string;
 }
 
-export interface ParsedChunkResponse {
-	specPatch: string;
-	sectionsChanged: string[];
-}
-
 function parseEnvelope(rawOutput: string): ClaudeResponseEnvelope {
 	let envelope: unknown;
 	try {
@@ -64,44 +59,6 @@ export function parseClaudeResponse(rawOutput: string): ParsedClaudeResponse {
 		commitMessage: inner.commitMessage,
 		costUsd: envelope.total_cost_usd ?? envelope.cost_usd ?? 0,
 		sessionId: envelope.session_id,
-	};
-}
-
-export function parseChunkResponse(rawOutput: string): ParsedChunkResponse {
-	const envelope = parseEnvelope(rawOutput);
-	const inner = envelope.structured_output
-		? (envelope.structured_output as { specPatch: string; sectionsChanged: string[] })
-		: parseInnerJson<{ specPatch: string; sectionsChanged: string[] }>(envelope.result);
-
-	return {
-		specPatch: inner.specPatch,
-		sectionsChanged: inner.sectionsChanged,
-	};
-}
-
-export interface ReconcileFinding {
-	type: "addition" | "removal" | "modification";
-	specSection: string;
-	description: string;
-	sourcePaths: string[];
-}
-
-export interface ParsedReconcileChunkResponse {
-	findings: ReconcileFinding[];
-	sectionsAffected: string[];
-	costUsd: number;
-}
-
-export function parseReconcileChunkResponse(rawOutput: string): ParsedReconcileChunkResponse {
-	const envelope = parseEnvelope(rawOutput);
-	const inner = envelope.structured_output
-		? (envelope.structured_output as { findings: ReconcileFinding[]; sectionsAffected: string[] })
-		: parseInnerJson<{ findings: ReconcileFinding[]; sectionsAffected: string[] }>(envelope.result);
-
-	return {
-		findings: inner.findings ?? [],
-		sectionsAffected: inner.sectionsAffected ?? [],
-		costUsd: envelope.total_cost_usd ?? envelope.cost_usd ?? 0,
 	};
 }
 

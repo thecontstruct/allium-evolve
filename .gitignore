@@ -3,4 +3,6 @@ dist/
 coverage/
 test/fixtures/repo/
 .allium-state.json
+.allium-state-*.json
+.allium-tmp/
 *.tsbuildinfo

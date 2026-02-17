@@ -5,17 +5,23 @@ Before proceeding:
 2. Consult `references/language-reference.md` for Allium syntax when needed
 3. Reference `SKILL.md` for a quick syntax overview
 
-## Trunk Specification
+## Context Files
 
-{trunkSpec}
+The following files have been written for you to read:
 
-## Branch Specification
+{contextManifest}
 
-{branchSpec}
+**Processing strategy:**
+1. Read `merge.diffstat` first to assess the scope of changes
+2. Read `trunk-spec.allium` (the main line specification)
+3. Read `branch-spec.allium` (the feature branch specification)
+4. If the diff is small, read `merge.diff` directly
+5. If the diff is large (many files/hunks), use Task sub-agents to analyze
+   different sections in parallel, then synthesize the results
+6. After producing the merged spec, re-read both spec files to verify
+   no entities, rules, or relationships were lost
 
-## Merge Commit Changes
-
-{mergeDiff}
+All context files persist across your turns — re-read them if needed.
 
 ## Specification Structure
 

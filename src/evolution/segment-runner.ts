@@ -3,14 +3,18 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assembleContext, assembleModuleSpec } from "../claude/context.js";
 import { getModelForStep, type StepType } from "../claude/models.js";
-import { type ClaudeResult, invokeClaudeForChunk, invokeClaudeForStep } from "../claude/runner.js";
+import {
+	type ClaudeResult,
+	invokeClaudeForStep,
+	writeContextFiles,
+	formatManifest,
+} from "../claude/runner.js";
 import type { EvolutionConfig } from "../config.js";
 import type { CommitNode, Segment } from "../dag/types.js";
 import { createAlliumCommit, updateRef } from "../git/plumbing.js";
 import type { SpecStore } from "../spec/store.js";
 import type { StateTracker } from "../state/tracker.js";
 import type { CompletedStep, SegmentProgress } from "../state/types.js";
-import { chunkDiff } from "./diff-chunker.js";
 import { advance, createWindow, seedWindow, type WindowState } from "./window.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -143,16 +147,14 @@ export async function runSegment(opts: {
 			prevSpec: prevSpecForContext,
 		});
 
-		const result =
-			context.totalDiffTokens > config.maxDiffTokens
-				? await processChunkedStep(
-						{ commitSha, stepType, model, windowState, dag, config, currentSpec },
-						context.fullDiffs,
-					)
-				: await processStepFromContext(
-						{ commitSha, stepType, model, config },
-						context,
-					);
+		const result = await processStep({
+			stepType,
+			model,
+			config,
+			currentSpec: prevSpecForContext,
+			contextCommits: context.contextCommits,
+			fullDiffs: context.fullDiffs,
+		});
 
 		currentSpec = result.spec;
 		if (specStore) {
@@ -213,83 +215,43 @@ export async function runSegment(opts: {
 	};
 }
 
-async function processStepFromContext(
-	opts: {
-		commitSha: string;
-		stepType: StepType;
-		model: string;
-		config: EvolutionConfig;
-	},
-	context: { prevSpec: string; contextCommits: string; fullDiffs: string },
-): Promise<ClaudeResult> {
-	const { stepType, model, config } = opts;
+async function processStep(opts: {
+	stepType: StepType;
+	model: string;
+	config: EvolutionConfig;
+	currentSpec: string;
+	contextCommits: string;
+	fullDiffs: string;
+}): Promise<ClaudeResult> {
+	const { stepType, model, config, currentSpec, contextCommits, fullDiffs } = opts;
 
-	const templateName = stepType === "initial-commit" ? "initial-commit" : "evolve-step";
-	const template = await loadPromptTemplate(templateName);
+	const contextFiles: Record<string, string> = {
+		"current-spec.allium": currentSpec,
+		"changes.diff": fullDiffs,
+	};
+	if (contextCommits) {
+		contextFiles["context-commits.md"] = contextCommits;
+	}
 
-	const systemPrompt = fillTemplate(template, {
-		prevSpec: context.prevSpec,
-		contextCommits: context.contextCommits,
-		fullDiffs: context.fullDiffs,
-	});
+	const ctx = await writeContextFiles(config.repoPath, contextFiles);
 
-	return invokeClaudeForStep({
-		systemPrompt,
-		userPrompt: "Process the changes and update the specification. Return JSON.",
-		model,
-		workingDirectory: config.repoPath,
-		alliumSkillsPath: config.alliumSkillsPath,
-		maxRetries: config.maxParseRetries,
-	});
-}
+	try {
+		const templateName = stepType === "initial-commit" ? "initial-commit" : "evolve-step";
+		const template = await loadPromptTemplate(templateName);
 
-async function processChunkedStep(
-	opts: {
-		commitSha: string;
-		stepType: StepType;
-		model: string;
-		windowState: WindowState;
-		dag: Map<string, CommitNode>;
-		config: EvolutionConfig;
-		currentSpec: string;
-	},
-	fullDiffs: string,
-): Promise<ClaudeResult> {
-	const { config, currentSpec } = opts;
+		const systemPrompt = fillTemplate(template, {
+			contextManifest: formatManifest(ctx.manifest),
+		});
 
-	const { chunks } = chunkDiff({
-		fullDiff: fullDiffs,
-		maxDiffTokens: config.maxDiffTokens,
-		ignorePatterns: config.diffIgnorePatterns,
-	});
-
-	const chunkResults = await Promise.all(
-		chunks.map(async (chunk) => {
-			const chunkDiffs = chunk.files.map((f) => f.diff).join("\n");
-			return invokeClaudeForChunk({
-				systemPrompt: `You are analyzing a subset of changes for Allium specification distillation.\n\nCurrent spec:\n${currentSpec}\n\nChanges (${chunk.groupKey}):\n${chunkDiffs}`,
-				userPrompt: "Extract spec changes for this chunk. Return JSON with specPatch and sectionsChanged.",
-				model: getModelForStep("chunk-recombine", config),
-				workingDirectory: config.repoPath,
-				alliumSkillsPath: config.alliumSkillsPath,
-			});
-		}),
-	);
-
-	const specPatches = chunkResults.map((r, i) => `### Chunk: ${chunks[i]!.groupKey}\n${r.specPatch}`).join("\n\n");
-
-	const recombineTemplate = await loadPromptTemplate("recombine-chunks");
-	const recombinePrompt = fillTemplate(recombineTemplate, {
-		prevSpec: currentSpec,
-		specPatches,
-	});
-
-	return invokeClaudeForStep({
-		systemPrompt: recombinePrompt,
-		userPrompt: "Merge all spec patches into a single coherent specification update. Return JSON.",
-		model: getModelForStep("chunk-recombine", config),
-		workingDirectory: config.repoPath,
-		alliumSkillsPath: config.alliumSkillsPath,
-		maxRetries: config.maxParseRetries,
-	});
+		return await invokeClaudeForStep({
+			systemPrompt,
+			userPrompt: "Read the context files, process the changes, and update the specification. Return JSON.",
+			model,
+			workingDirectory: config.repoPath,
+			alliumSkillsPath: config.alliumSkillsPath,
+			maxRetries: config.maxParseRetries,
+		});
+	} finally {
+		await ctx.cleanup();
+	}
 }
