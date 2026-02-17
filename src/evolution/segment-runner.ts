@@ -7,11 +7,9 @@ import { type ClaudeResult, invokeClaudeForChunk, invokeClaudeForStep } from "..
 import type { EvolutionConfig } from "../config.js";
 import type { CommitNode, Segment } from "../dag/types.js";
 import { createAlliumCommit, updateRef } from "../git/plumbing.js";
-import type { ReconciliationScheduler, ReconciliationContext } from "../reconciliation/scheduler.js";
-import { runReconciliation } from "../reconciliation/runner.js";
 import type { SpecStore } from "../spec/store.js";
 import type { StateTracker } from "../state/tracker.js";
-import type { CompletedStep } from "../state/types.js";
+import type { CompletedStep, SegmentProgress } from "../state/types.js";
 import { chunkDiff } from "./diff-chunker.js";
 import { advance, createWindow, seedWindow, type WindowState } from "./window.js";
 
@@ -54,10 +52,9 @@ export async function runSegment(opts: {
 	parentAlliumSha: string | null;
 	trunkContextShas?: string[];
 	onStepComplete?: StepCallback;
-	scheduler?: ReconciliationScheduler;
 	stateTracker?: StateTracker;
-	trunkStepsCompleted?: number;
 	specStore?: SpecStore;
+	existingProgress?: SegmentProgress;
 }): Promise<SegmentRunnerResult> {
 	const {
 		segment,
@@ -68,11 +65,10 @@ export async function runSegment(opts: {
 		parentAlliumSha,
 		trunkContextShas,
 		onStepComplete,
-		scheduler,
 		stateTracker,
 		specStore,
 	} = opts;
-	let trunkStepsCompleted = opts.trunkStepsCompleted ?? 0;
+	let existingProgress = opts.existingProgress;
 
 	let windowState: WindowState = createWindow(config.windowSize, config.processDepth);
 
@@ -85,7 +81,51 @@ export async function runSegment(opts: {
 	let tipAlliumSha = parentAlliumSha ?? "";
 	const completedSteps: CompletedStep[] = [];
 
+	if (existingProgress && existingProgress.completedSteps.length > 0) {
+		const steps = existingProgress.completedSteps;
+		const isValidPrefix = steps.every(
+			(step, i) => i < segment.commits.length && step.originalSha === segment.commits[i],
+		);
+		if (!isValidPrefix) {
+			console.error(`[allium-evolve] Step-level resume validation failed for ${segment.id}, reprocessing from scratch`);
+			existingProgress = undefined;
+			if (stateTracker) {
+				stateTracker.resetSegmentProgress(segment.id);
+			}
+		} else {
+			const lastStep = steps[steps.length - 1];
+			if (lastStep) {
+				tipAlliumSha = lastStep.alliumSha;
+			}
+			currentSpec = existingProgress.currentSpec;
+			currentChangelog = existingProgress.currentChangelog;
+			if (specStore) {
+				specStore.setMasterSpec(currentSpec);
+			}
+			console.error(`[allium-evolve] Resuming ${segment.id}: skipping ${steps.length} completed steps`);
+		}
+	}
+
 	for (const commitSha of segment.commits) {
+		let existingStep: CompletedStep | undefined;
+		if (existingProgress && existingProgress.completedSteps.length > 0) {
+			const stepIndex = completedSteps.length;
+			if (stepIndex < existingProgress.completedSteps.length) {
+				const expectedStep = existingProgress.completedSteps[stepIndex];
+				if (expectedStep && expectedStep.originalSha === commitSha) {
+					existingStep = expectedStep;
+				} else {
+					existingProgress = undefined;
+				}
+			}
+		}
+
+		if (existingStep) {
+			windowState = advance(windowState, commitSha);
+			completedSteps.push(existingStep);
+			continue;
+		}
+
 		windowState = advance(windowState, commitSha);
 
 		const isInitial = isInitialCommit(commitSha, dag);
@@ -102,61 +142,6 @@ export async function runSegment(opts: {
 			repoPath: config.repoPath,
 			prevSpec: prevSpecForContext,
 		});
-
-		let reconciliationMeta = "";
-		if (scheduler && stateTracker) {
-			const reconState = stateTracker.getReconciliationState();
-			const upcomingTotal = reconState.cumulativeDiffTokens + context.totalDiffTokens;
-			const reconCtx: ReconciliationContext = {
-				totalStepsCompleted: stateTracker.getState().totalSteps + completedSteps.length + 1,
-				trunkStepsCompleted,
-				cumulativeDiffTokensSinceLastReconciliation: upcomingTotal,
-				segmentType: segment.type,
-				lastReconciliationStep: reconState.lastStep,
-			};
-
-			if (scheduler.shouldReconcile(reconCtx)) {
-				const reconResult = await runReconciliation({
-					currentSpec,
-					commitSha,
-					config,
-					lastReconciliationSha: reconState.lastSha,
-				});
-
-				stateTracker.recordReconciliation(
-					{
-						atStep: reconCtx.totalStepsCompleted,
-						atSha: commitSha,
-						model: config.reconciliation.model ?? config.opusModel,
-						costUsd: reconResult.costUsd,
-						findingsCount: reconResult.findings.length,
-						skipped: reconResult.skipped,
-						timestamp: new Date().toISOString(),
-					},
-					commitSha,
-				);
-
-				if (!reconResult.skipped && reconResult.findings.length > 0) {
-					currentSpec = reconResult.updatedSpec;
-					if (specStore) {
-						specStore.setMasterSpec(currentSpec);
-					}
-					if (reconResult.changelog) {
-						currentChangelog += `\n${reconResult.changelog}\n`;
-					}
-					reconciliationMeta = [
-						`Reconciliation: source-grounded at ${commitSha.slice(0, 8)}`,
-						`Findings: ${reconResult.findings.length} changes`,
-						`Reconciliation cost: $${reconResult.costUsd.toFixed(4)}`,
-					].join("\n");
-
-					const reconPrevSpec = specStore && specStore.getAllModules().size > 0
-						? assembleModuleSpec(specStore, [commitSha])
-						: currentSpec;
-					context.prevSpec = reconPrevSpec;
-				}
-			}
-		}
 
 		const result =
 			context.totalDiffTokens > config.maxDiffTokens
@@ -176,27 +161,16 @@ export async function runSegment(opts: {
 		const changelogEntry = `\n${result.changelog}\n`;
 		currentChangelog += changelogEntry;
 
-		if (stateTracker) {
-			stateTracker.addDiffTokens(context.totalDiffTokens);
-		}
-		if (segment.type === "trunk") {
-			trunkStepsCompleted++;
-		}
-
 		const node = dag.get(commitSha);
 		const originalMessage = node?.message ?? "";
 		const windowCommits = windowState.commits;
-		const commitMessageParts = [
+		const commitMessage = [
 			`allium: ${result.commitMessage}`,
 			"",
 			`Original: ${commitSha} "${originalMessage}"`,
 			`Window: ${windowCommits[0]?.slice(0, 8) ?? ""}..${windowCommits[windowCommits.length - 1]?.slice(0, 8) ?? ""}`,
 			`Model: ${model}`,
-		];
-		if (reconciliationMeta) {
-			commitMessageParts.push("", reconciliationMeta);
-		}
-		const commitMessage = commitMessageParts.join("\n");
+		].join("\n");
 
 		const parentShas = tipAlliumSha ? [tipAlliumSha] : [];
 		const alliumSha = await createAlliumCommit({

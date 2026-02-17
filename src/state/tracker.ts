@@ -99,6 +99,22 @@ export class StateTracker {
 		return this.state.segmentProgress[segmentId];
 	}
 
+	resetSegmentProgress(segmentId: string): void {
+		const progress = this.state.segmentProgress[segmentId];
+		if (!progress) {
+			return;
+		}
+		for (const step of progress.completedSteps) {
+			delete this.state.shaMap[step.originalSha];
+			this.state.totalCostUsd -= step.costUsd;
+			this.state.totalSteps -= 1;
+		}
+		progress.completedSteps = [];
+		progress.currentSpec = "";
+		progress.currentChangelog = "";
+		progress.status = "pending";
+	}
+
 	lookupAlliumSha(originalSha: string): string | undefined {
 		return this.state.shaMap[originalSha];
 	}
