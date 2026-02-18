@@ -10,14 +10,30 @@ import type { CompletedStep, SegmentProgress } from "../state/types.js";
 import { runMerge } from "./merge-runner.js";
 import { runSegment, type SegmentRunnerResult } from "./segment-runner.js";
 
-export async function runEvolution(config: EvolutionConfig, shutdownSignal?: ShutdownSignal): Promise<void> {
-	console.error(`[allium-evolve] Starting evolution for ${config.repoPath}`);
+export interface SetupResult {
+	dag: Map<string, CommitNode>;
+	segments: Segment[];
+	rootCommit: string;
+	stateTracker: StateTracker;
+	isResume: boolean;
+}
+
+export async function setupEvolution(config: EvolutionConfig): Promise<SetupResult> {
+	console.error(`[allium-evolve] Starting setup for ${config.repoPath}`);
 	console.error(`[allium-evolve] Target ref: ${config.targetRef}`);
-	console.error(`[allium-evolve] Parallel branches: ${config.parallelBranches}`);
 
 	const dag = await buildDag(config.repoPath, config.targetRef);
+	if (dag.size === 0) {
+		throw new Error(
+			`No commits found for ref '${config.targetRef}'. Verify the repository has commits and the ref exists.`,
+		);
+	}
+
 	await identifyTrunk(dag, config.repoPath, config.targetRef);
 	const segments = decompose(dag);
+	if (segments.length === 0) {
+		throw new Error("DAG produced 0 segments — nothing to process.");
+	}
 
 	const rootNodes = [...dag.values()].filter((n) => n.parents.length === 0);
 	if (rootNodes.length === 0) {
@@ -31,13 +47,21 @@ export async function runEvolution(config: EvolutionConfig, shutdownSignal?: Shu
 	}
 
 	const stateTracker = new StateTracker(config.stateFile);
-	const loaded = await stateTracker.load();
-	if (loaded) {
+	const isResume = await stateTracker.load();
+	if (isResume) {
 		console.error("[allium-evolve] Resumed from existing state");
 	} else {
 		stateTracker.initState(config, segments, rootCommit);
 		await stateTracker.save();
 	}
+
+	return { dag, segments, rootCommit, stateTracker, isResume };
+}
+
+export async function runEvolution(config: EvolutionConfig, shutdownSignal?: ShutdownSignal): Promise<void> {
+	console.error(`[allium-evolve] Parallel branches: ${config.parallelBranches}`);
+
+	const { dag, segments, stateTracker } = await setupEvolution(config);
 
 	const segmentResults = new Map<string, SegmentRunnerResult>();
 

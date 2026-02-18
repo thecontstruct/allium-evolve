@@ -1,7 +1,8 @@
 #!/usr/bin/env node --import tsx
 import { Command } from "commander";
 import { defaultConfig, type EvolutionConfig } from "./config.js";
-import { runEvolution } from "./evolution/orchestrator.js";
+import { computeSetupStats, formatSetupStats } from "./evolution/estimator.js";
+import { runEvolution, setupEvolution } from "./evolution/orchestrator.js";
 import { GracefulShutdownError, ShutdownSignal } from "./shutdown.js";
 
 const program = new Command();
@@ -25,6 +26,7 @@ program
 	.option("--allium-skills-path <path>", "Path to Allium skills directory")
 	.option("--reconciliation-strategy <strategy>", "Reconciliation strategy (none, n-commits, n-trunk-commits, token-count)", "n-trunk-commits")
 	.option("--reconciliation-interval <n>", "Reconciliation interval (commits or token threshold)", "50")
+	.option("--setup-only", "Analyze repository and display cost/time estimates without processing")
 	.action(async (opts) => {
 		const config: EvolutionConfig = defaultConfig({
 			repoPath: opts.repo,
@@ -45,6 +47,26 @@ program
 				interval: Number.parseInt(opts.reconciliationInterval, 10),
 			},
 		});
+
+		if (opts.setupOnly) {
+			try {
+				const setup = await setupEvolution(config);
+				const stats = computeSetupStats(
+					setup.dag,
+					setup.segments,
+					setup.stateTracker,
+					config,
+					setup.isResume,
+				);
+				console.log(formatSetupStats(stats));
+				process.exit(0);
+				return;
+			} catch (err) {
+				console.error("Setup failed:", err);
+				process.exit(1);
+				return;
+			}
+		}
 
 		const shutdownSignal = new ShutdownSignal();
 		let forceExit = false;
