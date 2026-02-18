@@ -4,6 +4,7 @@ import { decompose } from "../dag/segments.js";
 import { identifyTrunk } from "../dag/trunk.js";
 import type { CommitNode, Segment } from "../dag/types.js";
 import { updateRef } from "../git/plumbing.js";
+import { ClaudeSessionLimitError } from "../claude/errors.js";
 import type { ShutdownSignal } from "../shutdown.js";
 import { StateTracker } from "../state/tracker.js";
 import type { CompletedStep, SegmentProgress } from "../state/types.js";
@@ -148,7 +149,17 @@ async function runParallel(
 		}
 
 		if (inProgress.size > 0) {
-			await Promise.race(inProgress.values());
+			try {
+				await Promise.race(inProgress.values());
+			} catch (err) {
+				if (err instanceof ClaudeSessionLimitError) {
+					shutdownSignal?.request();
+					if (inProgress.size > 0) {
+						await Promise.allSettled(inProgress.values());
+					}
+				}
+				throw err;
+			}
 		}
 	}
 }
