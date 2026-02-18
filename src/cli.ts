@@ -1,5 +1,6 @@
 #!/usr/bin/env node --import tsx
 import { Command } from "commander";
+import { ClaudeSessionLimitError } from "./claude/errors.js";
 import { defaultConfig, type EvolutionConfig } from "./config.js";
 import { computeSetupStats, formatSetupStats } from "./evolution/estimator.js";
 import { runEvolution, setupEvolution } from "./evolution/orchestrator.js";
@@ -87,6 +88,11 @@ program
 			if (err instanceof GracefulShutdownError) {
 				console.error("[allium-evolve] Graceful shutdown complete. State saved — safe to resume.");
 				process.exit(0);
+				return;
+			}
+			if (err instanceof ClaudeSessionLimitError) {
+				console.error("[allium-evolve] Claude session limit reached. State saved — resume after limit resets.");
+				process.exitCode = 2;
 				return;
 			}
 			console.error("Evolution failed:", err);

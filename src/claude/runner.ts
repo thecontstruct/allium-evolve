@@ -2,7 +2,9 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readdir, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { setTimeout as sleep } from "node:timers/promises";
 import { exec } from "../utils/exec.js";
+import { ClaudeRateLimitError, ClaudeSessionLimitError, classifyClaudeError } from "./errors.js";
 import { parseClaudeResponse, validateResponse } from "./parser.js";
 
 export interface ClaudeResult {
@@ -20,6 +22,8 @@ export interface InvokeClaudeOpts {
 	workingDirectory: string;
 	alliumSkillsPath: string;
 	maxRetries?: number;
+	maxRateLimitRetries?: number;
+	rateLimitRetryDelayMs?: number;
 	maxTurns?: number;
 }
 
@@ -119,7 +123,9 @@ export function formatManifest(manifest: string[]): string {
 
 export async function invokeClaudeForStep(opts: InvokeClaudeOpts): Promise<ClaudeResult> {
 	const maxRetries = opts.maxRetries ?? 2;
+	const maxRateLimitRetries = opts.maxRateLimitRetries ?? 3;
 	let lastError: Error | null = null;
+	let rateLimitAttempts = 0;
 
 	for (let attempt = 0; attempt <= maxRetries; attempt++) {
 		try {
@@ -144,9 +150,42 @@ export async function invokeClaudeForStep(opts: InvokeClaudeOpts): Promise<Claud
 			};
 		} catch (err) {
 			lastError = err instanceof Error ? err : new Error(String(err));
+			const classification = classifyClaudeError(lastError);
+
+			if (classification === "session-limit") {
+				throw new ClaudeSessionLimitError(lastError.message);
+			}
+
+			if (typeof classification === "object" && classification.type === "rate-limit") {
+				rateLimitAttempts += 1;
+				if (rateLimitAttempts >= maxRateLimitRetries) {
+					throw new ClaudeRateLimitError(
+						`Claude rate-limited after ${rateLimitAttempts} retries: ${lastError.message}`,
+						classification.retryAfterMs,
+					);
+				}
+				const retryDelayMs = opts.rateLimitRetryDelayMs ?? classification.retryAfterMs ?? 60_000;
+				console.error(
+					`Claude invocation rate-limited (${rateLimitAttempts}/${maxRateLimitRetries}), retrying in ${retryDelayMs}ms: ${lastError.message}`,
+				);
+				await sleep(retryDelayMs);
+				attempt -= 1;
+				continue;
+			}
+
 			if (attempt < maxRetries) {
 				console.error(`Claude invocation attempt ${attempt + 1} failed, retrying: ${lastError.message}`);
 			}
+		}
+	}
+
+	if (lastError) {
+		const classification = classifyClaudeError(lastError);
+		if (typeof classification === "object" && classification.type === "rate-limit") {
+			throw new ClaudeRateLimitError(
+				`Claude rate-limited after ${maxRetries + 1} attempts: ${lastError.message}`,
+				classification.retryAfterMs,
+			);
 		}
 	}
 
