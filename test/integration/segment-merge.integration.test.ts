@@ -7,10 +7,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const execAsync = promisify(cpExec);
 
-// Mock the Claude runner BEFORE importing modules that use it
-vi.mock("../../src/claude/runner.js", () => {
+vi.mock("../../src/claude/runner.js", async (importOriginal) => {
+	const actual = (await importOriginal()) as Record<string, unknown>;
 	let callCount = 0;
 	return {
+		...actual,
 		invokeClaudeForStep: vi.fn(async () => {
 			callCount++;
 			return {
@@ -21,12 +22,6 @@ vi.mock("../../src/claude/runner.js", () => {
 				costUsd: 0.01,
 			};
 		}),
-		invokeClaudeForChunk: vi.fn(async () => ({
-			specPatch: "chunk patch",
-			sectionsChanged: ["section1"],
-			sessionId: "",
-			costUsd: 0,
-		})),
 	};
 });
 
@@ -98,12 +93,12 @@ describe("Segment runner + Merge runner isolation", () => {
 		defaultConfig = configMod.defaultConfig;
 
 		dag = await buildDag(repoPath);
-		await identifyTrunk(dag, repoPath, "main");
+		await identifyTrunk(dag, repoPath, "master");
 		segments = decompose(dag);
 
 		config = defaultConfig({
 			repoPath,
-			targetRef: "main",
+			targetRef: "master",
 			parallelBranches: false,
 			stateFile: join(tmpDir, "state.json"),
 			alliumBranch: "allium/evolution",

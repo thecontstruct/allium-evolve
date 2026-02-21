@@ -35,7 +35,7 @@ describe("setupEvolution – setup-only mode", () => {
 		it("should return dag, segments, stateTracker, and rootCommit", async () => {
 			const config = defaultConfig({
 				repoPath,
-				targetRef: "main",
+				targetRef: "master",
 				parallelBranches: false,
 				stateFile: stateFilePath,
 				alliumBranch: "allium/setup-test",
@@ -92,7 +92,7 @@ describe("setupEvolution – setup-only mode", () => {
 		it("should produce stats with correct structure", async () => {
 			const config = defaultConfig({
 				repoPath,
-				targetRef: "main",
+				targetRef: "master",
 				parallelBranches: false,
 				stateFile: stateFilePath,
 				alliumBranch: "allium/setup-test",
@@ -116,7 +116,7 @@ describe("setupEvolution – setup-only mode", () => {
 		it("should format stats with all sections", async () => {
 			const config = defaultConfig({
 				repoPath,
-				targetRef: "main",
+				targetRef: "master",
 				parallelBranches: false,
 				stateFile: stateFilePath,
 				alliumBranch: "allium/setup-test",
@@ -140,7 +140,7 @@ describe("setupEvolution – setup-only mode", () => {
 		it("should detect resume on second call", async () => {
 			const config = defaultConfig({
 				repoPath,
-				targetRef: "main",
+				targetRef: "master",
 				parallelBranches: false,
 				stateFile: stateFilePath,
 				alliumBranch: "allium/setup-test",

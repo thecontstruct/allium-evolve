@@ -23,6 +23,12 @@ function makeConfig(overrides: Partial<EvolutionConfig> = {}): EvolutionConfig {
 		maxParseRetries: 2,
 		diffIgnorePatterns: ["*-lock.*"],
 		alliumSkillsPath: "/home/.claude/skills/allium",
+		reconciliation: {
+			strategy: "n-trunk-commits",
+			interval: 50,
+			sourceIgnorePatterns: [],
+			maxConcurrency: 5,
+		},
 		...overrides,
 	};
 }
@@ -409,6 +415,61 @@ describe("StateTracker", () => {
 
 			expect(resumed.getState().totalCostUsd).toBeCloseTo(1.0, 10);
 			expect(resumed.getState().totalSteps).toBe(2);
+		});
+	});
+
+	describe("UNIT-033: setShaMap and seedSegmentProgress for --start-after", () => {
+		it("setShaMap replaces shaMap", () => {
+			const tracker = new StateTracker(stateFilePath);
+			tracker.initState(makeConfig(), makeSegments(), "aaa111");
+			tracker.recordStep("trunk-0", makeStep({ originalSha: "aaa111", alliumSha: "x1" }), "", "");
+
+			tracker.setShaMap({ aaa111: "y1", bbb222: "y2" });
+
+			expect(tracker.getState().shaMap).toEqual({ aaa111: "y1", bbb222: "y2" });
+		});
+
+		it("seedSegmentProgress sets progress and increments totalSteps", () => {
+			const tracker = new StateTracker(stateFilePath);
+			tracker.initState(makeConfig(), makeSegments(), "aaa111");
+
+			const step: CompletedStep = {
+				originalSha: "ccc333",
+				alliumSha: "z3",
+				model: "seeded",
+				costUsd: 0,
+				timestamp: new Date().toISOString(),
+			};
+			tracker.seedSegmentProgress(
+				"trunk-0",
+				{
+					status: "complete",
+					completedSteps: [step],
+					currentSpec: "entity User {}",
+					currentChangelog: "# Changelog",
+				},
+				3,
+			);
+
+			const progress = tracker.getSegmentProgress("trunk-0")!;
+			expect(progress.status).toBe("complete");
+			expect(progress.completedSteps).toHaveLength(1);
+			expect(progress.completedSteps[0]!.originalSha).toBe("ccc333");
+			expect(progress.currentSpec).toBe("entity User {}");
+			expect(tracker.getState().totalSteps).toBe(3);
+		});
+
+		it("seedSegmentProgress throws for unknown segment", () => {
+			const tracker = new StateTracker(stateFilePath);
+			tracker.initState(makeConfig(), makeSegments(), "aaa111");
+
+			expect(() =>
+				tracker.seedSegmentProgress(
+					"nonexistent",
+					{ status: "complete", completedSteps: [], currentSpec: "", currentChangelog: "" },
+					0,
+				),
+			).toThrow("Unknown segment");
 		});
 	});
 });

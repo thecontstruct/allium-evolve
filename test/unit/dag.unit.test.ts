@@ -36,7 +36,7 @@ describe("dag module", () => {
 
 	beforeAll(async () => {
 		dag = await buildDag(FIXTURE_REPO);
-		await identifyTrunk(dag, FIXTURE_REPO, "main");
+		await identifyTrunk(dag, FIXTURE_REPO, "master");
 		segments = decompose(dag);
 	});
 

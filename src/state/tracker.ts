@@ -150,4 +150,17 @@ export class StateTracker {
 	getState(): Readonly<EvolutionState> {
 		return this.state;
 	}
+
+	setShaMap(shaMap: Record<string, string>): void {
+		this.state.shaMap = { ...shaMap };
+	}
+
+	seedSegmentProgress(segmentId: string, progress: SegmentProgress, stepCount: number): void {
+		const existing = this.state.segmentProgress[segmentId];
+		if (!existing) {
+			throw new Error(`Unknown segment: ${segmentId}`);
+		}
+		this.state.segmentProgress[segmentId] = progress;
+		this.state.totalSteps += stepCount;
+	}
 }

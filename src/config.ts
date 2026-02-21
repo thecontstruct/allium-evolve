@@ -16,6 +16,8 @@ export interface ReconciliationConfig {
 export interface EvolutionConfig {
 	repoPath: string;
 	targetRef: string;
+	startAfter?: string;
+	seedSpecFrom?: string;
 	windowSize: number;
 	processDepth: number;
 	defaultModel: string;
@@ -62,6 +64,8 @@ export function defaultConfig(overrides: Partial<EvolutionConfig> = {}): Evoluti
 	return {
 		repoPath: resolve(overrides.repoPath ?? process.cwd()),
 		targetRef: overrides.targetRef ?? "HEAD",
+		startAfter: overrides.startAfter,
+		seedSpecFrom: overrides.seedSpecFrom,
 		windowSize: overrides.windowSize ?? 5,
 		processDepth: overrides.processDepth ?? 1,
 		defaultModel: overrides.defaultModel ?? "sonnet",

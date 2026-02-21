@@ -1,12 +1,15 @@
 import type { EvolutionConfig } from "../config.js";
+import { collectAncestors } from "../dag/ancestors.js";
 import { buildDag } from "../dag/builder.js";
 import { decompose } from "../dag/segments.js";
 import { identifyTrunk } from "../dag/trunk.js";
 import type { CommitNode, Segment } from "../dag/types.js";
+import { readChangelogFromCommit, readSpecFromCommit } from "../git/read-spec.js";
 import { updateRef } from "../git/plumbing.js";
 import type { ShutdownSignal } from "../shutdown.js";
 import { StateTracker } from "../state/tracker.js";
 import type { CompletedStep, SegmentProgress } from "../state/types.js";
+import { buildShaMapFromAlliumBranch, resolveSeedAlliumSha } from "./seed-resolver.js";
 import { runMerge } from "./merge-runner.js";
 import { runSegment, type SegmentRunnerResult } from "./segment-runner.js";
 
@@ -47,14 +50,116 @@ export async function setupEvolution(config: EvolutionConfig): Promise<SetupResu
 	}
 
 	const stateTracker = new StateTracker(config.stateFile);
-	const isResume = await stateTracker.load();
-	if (isResume) {
-		console.error("[allium-evolve] Resumed from existing state");
-	} else {
+	let isResume: boolean;
+
+	if (config.startAfter) {
+		isResume = false;
+		if (!dag.has(config.startAfter)) {
+			throw new Error(
+				`--start-after commit ${config.startAfter.slice(0, 8)} is not in the DAG for ref '${config.targetRef}'.`,
+			);
+		}
+
+		const { exec } = await import("../utils/exec.js");
+		const { stdout: tipRef } = await exec(`git rev-parse ${config.targetRef}`, { cwd: config.repoPath });
+		const tipSha = tipRef.trim();
+		if (tipSha === config.startAfter) {
+			throw new Error(
+				`--start-after ${config.startAfter.slice(0, 8)} is the tip of ${config.targetRef}. No new commits to process.`,
+			);
+		}
+
+		const seedAlliumSha = await resolveSeedAlliumSha(
+			config.repoPath,
+			config.startAfter,
+			config.alliumBranch,
+			config.seedSpecFrom,
+		);
+		const shaMap = await buildShaMapFromAlliumBranch(config.repoPath, seedAlliumSha);
+
 		stateTracker.initState(config, segments, rootCommit);
-		await stateTracker.save();
+		stateTracker.setShaMap(shaMap);
+		stateTracker.updateBranchHead(seedAlliumSha);
+
+		const ancestorSet = collectAncestors(dag, config.startAfter);
+
+		for (const segment of segments) {
+			const prefixLength = segment.commits.filter((c) => ancestorSet.has(c)).length;
+			if (prefixLength === 0) continue;
+
+			if (prefixLength === segment.commits.length) {
+				const tipSha = segment.commits[segment.commits.length - 1]!;
+				const tipAlliumSha = shaMap[tipSha];
+				if (!tipAlliumSha) {
+					throw new Error(
+						`Cannot seed segment '${segment.id}': no allium SHA found for original commit ${tipSha.slice(0, 8)}. The corresponding allium commit may have been manually edited or lacks an 'Original:' tag. Re-run without --start-after, or fix the allium branch commit message for ${tipSha.slice(0, 8)}.`,
+					);
+				}
+				const currentSpec = await readSpecFromCommit(config.repoPath, tipAlliumSha);
+				const currentChangelog = await readChangelogFromCommit(config.repoPath, tipAlliumSha);
+				const tipStep: CompletedStep = {
+					originalSha: tipSha,
+					alliumSha: tipAlliumSha,
+					model: "seeded",
+					costUsd: 0,
+					timestamp: new Date().toISOString(),
+				};
+				stateTracker.seedSegmentProgress(
+					segment.id,
+					{
+						status: "complete",
+						completedSteps: [tipStep],
+						currentSpec,
+						currentChangelog,
+					},
+					segment.commits.length,
+				);
+			} else {
+				const prefixCommits = segment.commits.slice(0, prefixLength);
+				const completedSteps: CompletedStep[] = [];
+				for (const commitSha of prefixCommits) {
+					const alliumSha = shaMap[commitSha];
+					if (!alliumSha) {
+						throw new Error(
+							`Cannot seed partial segment '${segment.id}': no allium SHA found for original commit ${commitSha.slice(0, 8)}. The corresponding allium commit may have been manually edited or lacks an 'Original:' tag. Re-run without --start-after, or fix the allium branch commit message for ${commitSha.slice(0, 8)}.`,
+						);
+					}
+					completedSteps.push({
+						originalSha: commitSha,
+						alliumSha,
+						model: "seeded",
+						costUsd: 0,
+						timestamp: new Date().toISOString(),
+					});
+				}
+				const lastAlliumSha = completedSteps[completedSteps.length - 1]!.alliumSha;
+				const currentSpec = await readSpecFromCommit(config.repoPath, lastAlliumSha);
+				const currentChangelog = await readChangelogFromCommit(config.repoPath, lastAlliumSha);
+				stateTracker.seedSegmentProgress(
+					segment.id,
+					{
+						status: "in-progress",
+						completedSteps,
+						currentSpec,
+						currentChangelog,
+					},
+					prefixLength,
+				);
+			}
+		}
+
+		isResume = true;
+		console.error("[allium-evolve] Seeded from allium branch");
+	} else {
+		isResume = await stateTracker.load();
+		if (isResume) {
+			console.error("[allium-evolve] Resumed from existing state");
+		} else {
+			stateTracker.initState(config, segments, rootCommit);
+		}
 	}
 
+	await stateTracker.save();
 	return { dag, segments, rootCommit, stateTracker, isResume };
 }
 
@@ -64,6 +169,18 @@ export async function runEvolution(config: EvolutionConfig, shutdownSignal?: Shu
 	const { dag, segments, stateTracker } = await setupEvolution(config);
 
 	const segmentResults = new Map<string, SegmentRunnerResult>();
+	for (const seg of segments) {
+		const progress = stateTracker.getSegmentProgress(seg.id);
+		if (progress?.status === "complete" && progress.completedSteps.length > 0) {
+			const lastStep = progress.completedSteps[progress.completedSteps.length - 1]!;
+			segmentResults.set(seg.id, {
+				currentSpec: progress.currentSpec,
+				currentChangelog: progress.currentChangelog,
+				tipAlliumSha: lastStep.alliumSha,
+				completedSteps: progress.completedSteps,
+			});
+		}
+	}
 
 	if (config.parallelBranches) {
 		await runParallel(config, dag, segments, stateTracker, segmentResults, shutdownSignal);

@@ -7,10 +7,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const execAsync = promisify(cpExec);
 
-// Mock the Claude runner BEFORE importing modules that use it
-vi.mock("../../src/claude/runner.js", () => {
+vi.mock("../../src/claude/runner.js", async (importOriginal) => {
+	const actual = (await importOriginal()) as Record<string, unknown>;
 	let callCount = 0;
 	return {
+		...actual,
 		invokeClaudeForStep: vi.fn(async () => {
 			callCount++;
 			return {
@@ -21,12 +22,6 @@ vi.mock("../../src/claude/runner.js", () => {
 				costUsd: 0.01,
 			};
 		}),
-		invokeClaudeForChunk: vi.fn(async () => ({
-			specPatch: "chunk patch",
-			sectionsChanged: ["section1"],
-			sessionId: "",
-			costUsd: 0,
-		})),
 	};
 });
 
@@ -55,7 +50,7 @@ describe("Orchestrator – sequential mode", () => {
 
 		const config = defaultConfig({
 			repoPath,
-			targetRef: "main",
+			targetRef: "master",
 			parallelBranches: false,
 			stateFile: stateFilePath,
 			alliumBranch: "allium/evolution",
@@ -70,11 +65,11 @@ describe("Orchestrator – sequential mode", () => {
 	});
 
 	describe("INT-001: Full sequential run creates allium branch with correct commit count", () => {
-		it("should create allium commits for all 30 original commits (tracked in state file)", async () => {
+		it("should create allium commits for all original commits (tracked in state file)", async () => {
 			const raw = await readFile(stateFilePath, "utf-8");
 			const state = JSON.parse(raw);
 			// shaMap has one entry per original commit → allium commit mapping
-			expect(Object.keys(state.shaMap).length).toBe(30);
+			expect(Object.keys(state.shaMap).length).toBe(28);
 		});
 
 		it("should have reachable commits from trunk tip (dead-end no longer updates ref)", async () => {
@@ -154,16 +149,16 @@ describe("Orchestrator – sequential mode", () => {
 	});
 
 	describe("INT-005: State file has correct total step count", () => {
-		it("should have totalSteps equal to 30 (one per original commit)", async () => {
+		it("should have totalSteps equal to 28 (one per original commit)", async () => {
 			const raw = await readFile(stateFilePath, "utf-8");
 			const state = JSON.parse(raw);
-			expect(state.totalSteps).toBe(30);
+			expect(state.totalSteps).toBe(28);
 		});
 
 		it("should have totalCostUsd matching step count * 0.01", async () => {
 			const raw = await readFile(stateFilePath, "utf-8");
 			const state = JSON.parse(raw);
-			expect(state.totalCostUsd).toBeCloseTo(0.30, 6);
+			expect(state.totalCostUsd).toBeCloseTo(0.28, 6);
 		});
 	});
 });

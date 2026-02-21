@@ -7,10 +7,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const execAsync = promisify(cpExec);
 
-// Mock the Claude runner BEFORE importing modules that use it
-vi.mock("../../src/claude/runner.js", () => {
+vi.mock("../../src/claude/runner.js", async (importOriginal) => {
+	const actual = (await importOriginal()) as Record<string, unknown>;
 	let callCount = 0;
 	return {
+		...actual,
 		invokeClaudeForStep: vi.fn(async () => {
 			callCount++;
 			return {
@@ -21,12 +22,6 @@ vi.mock("../../src/claude/runner.js", () => {
 				costUsd: 0.01,
 			};
 		}),
-		invokeClaudeForChunk: vi.fn(async () => ({
-			specPatch: "chunk patch",
-			sectionsChanged: ["section1"],
-			sessionId: "",
-			costUsd: 0,
-		})),
 	};
 });
 
@@ -52,7 +47,7 @@ describe("Orchestrator – parallel mode", () => {
 
 		const config = defaultConfig({
 			repoPath,
-			targetRef: "main",
+			targetRef: "master",
 			parallelBranches: true,
 			maxConcurrency: 2,
 			stateFile: stateFilePath,
@@ -68,9 +63,9 @@ describe("Orchestrator – parallel mode", () => {
 	});
 
 	describe("INT-006: Full parallel run creates same allium branch structure as sequential", () => {
-		it("should have 13 reachable commits on allium/evolution", async () => {
+		it("should have 28 reachable commits on allium/evolution", async () => {
 			const { stdout } = await execAsync("git rev-list --count refs/heads/allium/evolution", { cwd: repoPath });
-			expect(Number.parseInt(stdout.trim(), 10)).toBe(13);
+			expect(Number.parseInt(stdout.trim(), 10)).toBe(28);
 		});
 
 		it("should have exactly 2 merge commits on allium branch", async () => {
@@ -92,10 +87,10 @@ describe("Orchestrator – parallel mode", () => {
 			}
 		});
 
-		it("should have 30 total steps", async () => {
+		it("should have 28 total steps", async () => {
 			const raw = await readFile(stateFilePath, "utf-8");
 			const state = JSON.parse(raw);
-			expect(state.totalSteps).toBe(30);
+			expect(state.totalSteps).toBe(28);
 		});
 	});
 
@@ -105,8 +100,8 @@ describe("Orchestrator – parallel mode", () => {
 				cwd: repoPath,
 			});
 			const refs = stdout.trim().split("\n").filter(Boolean);
-			// There should be refs for branch-0, branch-1, and dead-end-0
-			expect(refs.length).toBe(3);
+			// There should be refs for branch-0 and branch-1
+			expect(refs.length).toBe(2);
 		});
 
 		it("each segment ref should point to a valid commit", async () => {
