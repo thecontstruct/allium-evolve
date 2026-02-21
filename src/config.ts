@@ -27,8 +27,10 @@ export interface EvolutionConfig {
 	alliumBranch: string;
 	maxParseRetries: number;
 	diffIgnorePatterns: string[];
+	/** Defaults to `~/.claude/skills/allium` when constructed via `defaultConfig`. Must be set explicitly if constructing `EvolutionConfig` directly. */
 	alliumSkillsPath: string;
 	reconciliation: ReconciliationConfig;
+	autoConfirm: boolean;
 }
 
 const DEFAULT_SOURCE_IGNORE_PATTERNS = [
@@ -75,5 +77,6 @@ export function defaultConfig(overrides: Partial<EvolutionConfig> = {}): Evoluti
 		diffIgnorePatterns: overrides.diffIgnorePatterns ?? ["*-lock.*", "*.min.*", "*.generated.*"],
 		alliumSkillsPath: overrides.alliumSkillsPath ?? join(homedir(), ".claude", "skills", "allium"),
 		reconciliation: defaultReconciliationConfig(overrides.reconciliation),
+		autoConfirm: overrides.autoConfirm ?? false,
 	};
 }

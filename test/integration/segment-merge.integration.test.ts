@@ -7,10 +7,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const execAsync = promisify(cpExec);
 
-// Mock the Claude runner BEFORE importing modules that use it
-vi.mock("../../src/claude/runner.js", () => {
+vi.mock("../../src/claude/runner.js", async (importOriginal) => {
+	const actual = (await importOriginal()) as Record<string, unknown>;
 	let callCount = 0;
 	return {
+		...actual,
 		invokeClaudeForStep: vi.fn(async () => {
 			callCount++;
 			return {
@@ -21,12 +22,6 @@ vi.mock("../../src/claude/runner.js", () => {
 				costUsd: 0.01,
 			};
 		}),
-		invokeClaudeForChunk: vi.fn(async () => ({
-			specPatch: "chunk patch",
-			sectionsChanged: ["section1"],
-			sessionId: "",
-			costUsd: 0,
-		})),
 	};
 });
 

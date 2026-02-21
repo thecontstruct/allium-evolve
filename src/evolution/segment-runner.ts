@@ -11,6 +11,7 @@ import {
 } from "../claude/runner.js";
 import type { EvolutionConfig } from "../config.js";
 import type { CommitNode, Segment } from "../dag/types.js";
+import { formatOriginalLine } from "../git/commit-metadata.js";
 import { createAlliumCommit, updateRef } from "../git/plumbing.js";
 import type { ShutdownSignal } from "../shutdown.js";
 import type { SpecStore } from "../spec/store.js";
@@ -174,7 +175,7 @@ export async function runSegment(opts: {
 		const commitMessage = [
 			`allium: ${result.commitMessage}`,
 			"",
-			`Original: ${commitSha} "${originalMessage}"`,
+			formatOriginalLine(commitSha, originalMessage),
 			`Window: ${windowCommits[0]?.slice(0, 8) ?? ""}..${windowCommits[windowCommits.length - 1]?.slice(0, 8) ?? ""}`,
 			`Model: ${model}`,
 		].join("\n");

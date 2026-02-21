@@ -20,6 +20,7 @@ mkdir -p "${REPO_DIR}"
 cd "${REPO_DIR}"
 
 git init
+git branch -M main
 git config user.email "test@allium-evolve.dev"
 git config user.name "Test Author"
 
@@ -111,7 +112,7 @@ export interface StoragePolicy { maxSizeMb: number; allowedTypes: string[]; }' \
 
 # === Back to trunk: merge branch-x as M1 ===
 
-git checkout main 2>/dev/null || git checkout master
+git checkout main
 
 git merge --no-ff branch-x -m "M1: Merge branch-x (payments feature)"
 
@@ -140,7 +141,7 @@ make_commit "src/routes/analytics.ts" \
 
 # === Back to trunk: merge branch-y as M2, then F ===
 
-git checkout main 2>/dev/null || git checkout master
+git checkout main
 
 git merge --no-ff branch-y -m "M2: Merge branch-y (storage feature)"
 

@@ -12,6 +12,7 @@ program
 	.description("Distill an evolving Allium specification from a git repository's commit history")
 	.requiredOption("--repo <path>", "Path to the git repository")
 	.option("--ref <ref>", "Target git ref", "HEAD")
+	.option("--yes, -y", "Skip confirmation prompt")
 	.option("--window-size <n>", "Sliding window size", "5")
 	.option("--process-depth <n>", "Number of tail commits to get full diffs", "1")
 	.option("--model <model>", "Default Claude model", "sonnet")
@@ -31,6 +32,7 @@ program
 		const config: EvolutionConfig = defaultConfig({
 			repoPath: opts.repo,
 			targetRef: opts.ref,
+			autoConfirm: opts.yes ?? false,
 			windowSize: Number.parseInt(opts.windowSize, 10),
 			processDepth: Number.parseInt(opts.processDepth, 10),
 			defaultModel: opts.model,
@@ -60,38 +62,35 @@ program
 				);
 				console.log(formatSetupStats(stats));
 				process.exit(0);
-				return;
 			} catch (err) {
 				console.error("Setup failed:", err);
 				process.exit(1);
-				return;
 			}
 		}
 
 		const shutdownSignal = new ShutdownSignal();
 		let forceExit = false;
-		process.on("SIGINT", () => {
-			if (forceExit) {
-				console.error("[allium-evolve] Force shutdown.");
-				process.exit(1);
-			}
-			shutdownSignal.request();
-			forceExit = true;
-		});
+	process.on("SIGINT", () => {
+		if (forceExit) {
+			console.error("[allium-evolve] Force shutdown.");
+			process.exit(1);
+		}
+		console.error("[allium-evolve] Graceful shutdown requested. Press Ctrl+C again to force-quit.");
+		shutdownSignal.request();
+		forceExit = true;
+	});
 
 		try {
 			await runEvolution(config, shutdownSignal);
 			process.exit(0);
-			return;
 		} catch (err) {
 			if (err instanceof GracefulShutdownError) {
 				console.error("[allium-evolve] Graceful shutdown complete. State saved — safe to resume.");
 				process.exit(0);
-				return;
+			} else {
+				console.error("Evolution failed:", err);
+				process.exit(1);
 			}
-			console.error("Evolution failed:", err);
-			process.exit(1);
-			return;
 		}
 	});
 

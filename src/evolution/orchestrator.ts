@@ -1,14 +1,34 @@
 import type { EvolutionConfig } from "../config.js";
+import { collectAncestors } from "../dag/ancestors.js";
 import { buildDag } from "../dag/builder.js";
 import { decompose } from "../dag/segments.js";
 import { identifyTrunk } from "../dag/trunk.js";
 import type { CommitNode, Segment } from "../dag/types.js";
+import { readChangelogFromCommit, readSpecFromCommit } from "../git/read-spec.js";
 import { updateRef } from "../git/plumbing.js";
 import type { ShutdownSignal } from "../shutdown.js";
 import { StateTracker } from "../state/tracker.js";
+import { confirmContinue } from "../utils/confirm.js";
 import type { CompletedStep, SegmentProgress } from "../state/types.js";
+import { exec } from "../utils/exec.js";
+import { resolveFromAlliumBranch } from "./seed-resolver.js";
 import { runMerge } from "./merge-runner.js";
 import { runSegment, type SegmentRunnerResult } from "./segment-runner.js";
+
+export type ResumeMode = "fresh" | "state-file" | "allium-branch";
+
+export interface ResumeInfo {
+	mode: ResumeMode;
+	totalCommits: number;
+	segmentCount: number;
+	completedSteps?: number;
+	remainingSteps?: number;
+	tipAlliumSha?: string;
+	startAfterSha?: string;
+	lastProcessedMessage?: string | null;
+	commitsBeyondAnchor?: number;
+	costSoFar?: number;
+}
 
 export interface SetupResult {
 	dag: Map<string, CommitNode>;
@@ -16,6 +36,7 @@ export interface SetupResult {
 	rootCommit: string;
 	stateTracker: StateTracker;
 	isResume: boolean;
+	resumeInfo: ResumeInfo;
 }
 
 export async function setupEvolution(config: EvolutionConfig): Promise<SetupResult> {
@@ -47,23 +68,217 @@ export async function setupEvolution(config: EvolutionConfig): Promise<SetupResu
 	}
 
 	const stateTracker = new StateTracker(config.stateFile);
-	const isResume = await stateTracker.load();
+	let isResume: boolean;
+	let resumeInfo: ResumeInfo;
+
+	const totalSteps = segments.reduce((sum, s) => sum + s.commits.length, 0);
+
+	isResume = await stateTracker.load();
 	if (isResume) {
+		const state = stateTracker.getState();
+		if (!dag.has(state.rootCommit)) {
+			throw new Error(
+				"State file references commits not in the current DAG (possible history rewrite). Delete the state file to restart, or restore the original history.",
+			);
+		}
+		for (const seg of segments) {
+			const progress = state.segmentProgress[seg.id];
+			if (!progress || progress.completedSteps.length === 0) continue;
+			for (const step of progress.completedSteps) {
+				if (!dag.has(step.originalSha)) {
+					throw new Error(
+						"State file references commits not in the current DAG (possible history rewrite). Delete the state file to restart, or restore the original history.",
+					);
+				}
+			}
+		}
 		console.error("[allium-evolve] Resumed from existing state");
+		resumeInfo = {
+			mode: "state-file",
+			totalCommits: dag.size,
+			segmentCount: segments.length,
+			completedSteps: state.totalSteps,
+			remainingSteps: totalSteps - state.totalSteps,
+			costSoFar: state.totalCostUsd,
+		};
 	} else {
-		stateTracker.initState(config, segments, rootCommit);
-		await stateTracker.save();
+		const resolved = await resolveFromAlliumBranch(config.repoPath, config.alliumBranch);
+		if (resolved) {
+			const { tipAlliumSha, startAfterSha, shaMap, commitsBeyondAnchor, lastProcessedMessage } = resolved;
+			if (!dag.has(startAfterSha)) {
+				throw new Error(
+					`Allium branch '${config.alliumBranch}' references commit ${startAfterSha.slice(0, 8)} which is not in the current DAG. Restore the missing commits, delete the allium branch to start fresh, or rebase the allium branch to remove commits referencing dropped originals.`,
+				);
+			}
+			const { stdout: tipRef } = await exec(`git rev-parse ${config.targetRef}`, { cwd: config.repoPath });
+			const tipSha = tipRef.trim();
+			if (tipSha === startAfterSha) {
+				throw new Error(
+					`Allium branch is already at the tip of ${config.targetRef}. No new commits to process.`,
+				);
+			}
+			stateTracker.initState(config, segments, rootCommit);
+			stateTracker.setShaMap(shaMap);
+			stateTracker.updateBranchHead(tipAlliumSha);
+			const ancestorSet = collectAncestors(dag, startAfterSha);
+			for (const segment of segments) {
+				const prefixLength = segment.commits.filter((c) => ancestorSet.has(c)).length;
+				if (prefixLength === 0) continue;
+				if (prefixLength === segment.commits.length) {
+					const segTipSha = segment.commits[segment.commits.length - 1]!;
+					const segTipAlliumSha = shaMap[segTipSha];
+					if (!segTipAlliumSha) {
+						throw new Error(
+							`Cannot seed segment '${segment.id}': no allium SHA found for original commit ${segTipSha.slice(0, 8)}. The corresponding allium commit may have been manually edited or lacks an 'Original:' tag. Fix the allium branch commit message for ${segTipSha.slice(0, 8)}.`,
+						);
+					}
+					const currentSpec = await readSpecFromCommit(config.repoPath, segTipAlliumSha);
+					const currentChangelog = await readChangelogFromCommit(config.repoPath, segTipAlliumSha);
+					const tipStep: CompletedStep = {
+						originalSha: segTipSha,
+						alliumSha: segTipAlliumSha,
+						model: "seeded",
+						costUsd: 0,
+						timestamp: new Date().toISOString(),
+					};
+					stateTracker.seedSegmentProgress(
+						segment.id,
+						{
+							status: "complete",
+							completedSteps: [tipStep],
+							currentSpec,
+							currentChangelog,
+						},
+						segment.commits.length,
+					);
+				} else {
+					const prefixCommits = segment.commits.slice(0, prefixLength);
+					const completedSteps: CompletedStep[] = [];
+					for (const commitSha of prefixCommits) {
+						const alliumSha = shaMap[commitSha];
+						if (!alliumSha) {
+							throw new Error(
+								`Cannot seed partial segment '${segment.id}': no allium SHA found for original commit ${commitSha.slice(0, 8)}. The corresponding allium commit may have been manually edited or lacks an 'Original:' tag. Fix the allium branch commit message for ${commitSha.slice(0, 8)}.`,
+							);
+						}
+						completedSteps.push({
+							originalSha: commitSha,
+							alliumSha,
+							model: "seeded",
+							costUsd: 0,
+							timestamp: new Date().toISOString(),
+						});
+					}
+					const lastAlliumSha = completedSteps[completedSteps.length - 1]!.alliumSha;
+					const currentSpec = await readSpecFromCommit(config.repoPath, lastAlliumSha);
+					const currentChangelog = await readChangelogFromCommit(config.repoPath, lastAlliumSha);
+					stateTracker.seedSegmentProgress(
+						segment.id,
+						{
+							status: "in-progress",
+							completedSteps,
+							currentSpec,
+							currentChangelog,
+						},
+						prefixLength,
+					);
+				}
+			}
+			isResume = true;
+			console.error("[allium-evolve] Seeded from allium branch");
+			const completedSteps = stateTracker.getState().totalSteps;
+			resumeInfo = {
+				mode: "allium-branch",
+				totalCommits: dag.size,
+				segmentCount: segments.length,
+				completedSteps,
+				remainingSteps: totalSteps - completedSteps,
+				tipAlliumSha,
+				startAfterSha,
+				lastProcessedMessage,
+				commitsBeyondAnchor,
+				costSoFar: 0,
+			};
+		} else {
+			stateTracker.initState(config, segments, rootCommit);
+			resumeInfo = {
+				mode: "fresh",
+				totalCommits: dag.size,
+				segmentCount: segments.length,
+			};
+		}
 	}
 
-	return { dag, segments, rootCommit, stateTracker, isResume };
+	return { dag, segments, rootCommit, stateTracker, isResume, resumeInfo };
+}
+
+function formatResumeMessage(resumeInfo: ResumeInfo, alliumBranch: string): string {
+	const lines: string[] = [];
+	if (resumeInfo.mode === "allium-branch") {
+		lines.push(`[allium-evolve] Resume detected from allium branch '${alliumBranch}'`);
+		if (resumeInfo.lastProcessedMessage) {
+			lines.push(`  Last processed: ${resumeInfo.startAfterSha?.slice(0, 8)} "${resumeInfo.lastProcessedMessage}"`);
+		}
+		lines.push(`  Allium tip:     ${resumeInfo.tipAlliumSha?.slice(0, 8)}${resumeInfo.commitsBeyondAnchor ? ` (${resumeInfo.commitsBeyondAnchor} commits ahead of last Original: tag)` : ""}`);
+		lines.push(`  Commits in DAG: ${resumeInfo.totalCommits}`);
+		lines.push(`  Already done:   ${resumeInfo.completedSteps}`);
+		lines.push(`  Remaining:      ${resumeInfo.remainingSteps}`);
+	} else if (resumeInfo.mode === "state-file") {
+		lines.push("[allium-evolve] Resume detected from state file");
+		const totalSteps =
+			(resumeInfo.completedSteps ?? 0) + (resumeInfo.remainingSteps ?? 0);
+		lines.push(`  Completed:  ${resumeInfo.completedSteps} / ${totalSteps} steps`);
+		if (resumeInfo.costSoFar !== undefined && resumeInfo.costSoFar > 0) {
+			lines.push(`  Cost so far: $${resumeInfo.costSoFar.toFixed(4)}`);
+		}
+	} else {
+		lines.push("[allium-evolve] Fresh start — no allium branch or state file found");
+		lines.push(`  Commits in DAG: ${resumeInfo.totalCommits}`);
+		lines.push(`  Segments:       ${resumeInfo.segmentCount}`);
+	}
+	return lines.join("\n");
 }
 
 export async function runEvolution(config: EvolutionConfig, shutdownSignal?: ShutdownSignal): Promise<void> {
 	console.error(`[allium-evolve] Parallel branches: ${config.parallelBranches}`);
 
-	const { dag, segments, stateTracker } = await setupEvolution(config);
+	const { dag, segments, stateTracker, resumeInfo } = await setupEvolution(config);
+
+	const message = formatResumeMessage(resumeInfo, config.alliumBranch);
+	console.error(message);
+
+	if (!config.autoConfirm) {
+		let confirmed: boolean;
+		try {
+			confirmed = await confirmContinue("Continue?");
+		} catch (err) {
+			if (err instanceof Error && err.message.includes("Non-interactive terminal")) {
+				console.error("[allium-evolve] Cannot prompt for confirmation in non-interactive mode. Use --yes / -y to skip.");
+				return;
+			}
+			throw err;
+		}
+		if (!confirmed) {
+			console.error("[allium-evolve] Aborted by user.");
+			return;
+		}
+	}
+
+	await stateTracker.save();
 
 	const segmentResults = new Map<string, SegmentRunnerResult>();
+	for (const seg of segments) {
+		const progress = stateTracker.getSegmentProgress(seg.id);
+		if (progress?.status === "complete" && progress.completedSteps.length > 0) {
+			const lastStep = progress.completedSteps[progress.completedSteps.length - 1]!;
+			segmentResults.set(seg.id, {
+				currentSpec: progress.currentSpec,
+				currentChangelog: progress.currentChangelog,
+				tipAlliumSha: lastStep.alliumSha,
+				completedSteps: progress.completedSteps,
+			});
+		}
+	}
 
 	if (config.parallelBranches) {
 		await runParallel(config, dag, segments, stateTracker, segmentResults, shutdownSignal);

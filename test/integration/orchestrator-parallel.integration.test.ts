@@ -7,26 +7,20 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const execAsync = promisify(cpExec);
 
-// Mock the Claude runner BEFORE importing modules that use it
-vi.mock("../../src/claude/runner.js", () => {
-	let callCount = 0;
+vi.mock("../../src/claude/runner.js", async (importOriginal) => {
+	const actual = (await importOriginal()) as Record<string, unknown>;
 	return {
+		...actual,
 		invokeClaudeForStep: vi.fn(async () => {
-			callCount++;
+			const callId = Math.random().toString(36).slice(2);
 			return {
-				spec: `spec-v${callCount}`,
-				changelog: `changelog entry ${callCount}`,
-				commitMessage: `evolve step ${callCount}`,
-				sessionId: `session-${callCount}`,
+				spec: `spec-v${callId}`,
+				changelog: `changelog entry ${callId}`,
+				commitMessage: `evolve step ${callId}`,
+				sessionId: `session-${callId}`,
 				costUsd: 0.01,
 			};
 		}),
-		invokeClaudeForChunk: vi.fn(async () => ({
-			specPatch: "chunk patch",
-			sectionsChanged: ["section1"],
-			sessionId: "",
-			costUsd: 0,
-		})),
 	};
 });
 
@@ -36,6 +30,7 @@ describe("Orchestrator – parallel mode", () => {
 	let tmpDir: string;
 	let repoPath: string;
 	let stateFilePath: string;
+	let parsedState: Record<string, unknown>;
 
 	beforeAll(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "allium-orch-par-"));
@@ -58,9 +53,13 @@ describe("Orchestrator – parallel mode", () => {
 			stateFile: stateFilePath,
 			alliumBranch: "allium/evolution",
 			alliumSkillsPath: "/tmp/fake-skills",
+			autoConfirm: true,
 		});
 
 		await runEvolution(config);
+
+		// Parse state file once so individual tests don't each re-read from disk.
+		parsedState = JSON.parse(await readFile(stateFilePath, "utf-8")) as Record<string, unknown>;
 	}, 60_000);
 
 	afterAll(async () => {
@@ -68,9 +67,9 @@ describe("Orchestrator – parallel mode", () => {
 	});
 
 	describe("INT-006: Full parallel run creates same allium branch structure as sequential", () => {
-		it("should have 13 reachable commits on allium/evolution", async () => {
+		it("should have 28 reachable commits on allium/evolution", async () => {
 			const { stdout } = await execAsync("git rev-list --count refs/heads/allium/evolution", { cwd: repoPath });
-			expect(Number.parseInt(stdout.trim(), 10)).toBe(13);
+			expect(Number.parseInt(stdout.trim(), 10)).toBe(28);
 		});
 
 		it("should have exactly 2 merge commits on allium branch", async () => {
@@ -83,19 +82,15 @@ describe("Orchestrator – parallel mode", () => {
 			expect(mergeCommits.length).toBe(2);
 		});
 
-		it("should have all segments marked complete in state file", async () => {
-			const raw = await readFile(stateFilePath, "utf-8");
-			const state = JSON.parse(raw);
-			const progressEntries = Object.values(state.segmentProgress) as Array<{ status: string }>;
+		it("should have all segments marked complete in state file", () => {
+			const progressEntries = Object.values(parsedState.segmentProgress as Record<string, { status: string }>);
 			for (const entry of progressEntries) {
 				expect(entry.status).toBe("complete");
 			}
 		});
 
-		it("should have 30 total steps", async () => {
-			const raw = await readFile(stateFilePath, "utf-8");
-			const state = JSON.parse(raw);
-			expect(state.totalSteps).toBe(30);
+		it("should have 28 total steps", () => {
+			expect(parsedState.totalSteps).toBe(28);
 		});
 	});
 
@@ -105,8 +100,8 @@ describe("Orchestrator – parallel mode", () => {
 				cwd: repoPath,
 			});
 			const refs = stdout.trim().split("\n").filter(Boolean);
-			// There should be refs for branch-0, branch-1, and dead-end-0
-			expect(refs.length).toBe(3);
+			// There should be refs for branch-0 and branch-1
+			expect(refs.length).toBe(2);
 		});
 
 		it("each segment ref should point to a valid commit", async () => {

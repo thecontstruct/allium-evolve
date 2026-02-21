@@ -9,6 +9,7 @@ import {
 } from "../claude/runner.js";
 import type { EvolutionConfig } from "../config.js";
 import type { CommitNode } from "../dag/types.js";
+import { formatOriginalLine } from "../git/commit-metadata.js";
 import { getDiff, getDiffstat } from "../git/diff.js";
 import { createAlliumCommit } from "../git/plumbing.js";
 
@@ -115,7 +116,7 @@ export async function runMerge(opts: {
 		const commitMessage = [
 			`allium: ${result.commitMessage}`,
 			"",
-			`Original: ${mergeSha} "${originalMessage}"`,
+			formatOriginalLine(mergeSha, originalMessage),
 			`Merge: ${trunkSegmentId} + ${branchSegmentId}`,
 			`Model: ${model}`,
 		].join("\n");
