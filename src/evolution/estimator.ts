@@ -214,7 +214,7 @@ export function formatSetupStats(stats: SetupStats): string {
 	lines.push(`    Wall clock:     ${formatDuration(stats.estimatedWallClock.low)} – ${formatDuration(stats.estimatedWallClock.high)}`);
 	lines.push("");
 
-	lines.push(`  State file:       saved (re-run without --setup-only to begin processing)`);
+	lines.push(`  Ready:            run without --setup-only to begin processing`);
 	lines.push("");
 
 	return lines.join("\n");

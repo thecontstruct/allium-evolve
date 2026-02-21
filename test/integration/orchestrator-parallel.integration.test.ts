@@ -9,16 +9,15 @@ const execAsync = promisify(cpExec);
 
 vi.mock("../../src/claude/runner.js", async (importOriginal) => {
 	const actual = (await importOriginal()) as Record<string, unknown>;
-	let callCount = 0;
 	return {
 		...actual,
 		invokeClaudeForStep: vi.fn(async () => {
-			callCount++;
+			const callId = Math.random().toString(36).slice(2);
 			return {
-				spec: `spec-v${callCount}`,
-				changelog: `changelog entry ${callCount}`,
-				commitMessage: `evolve step ${callCount}`,
-				sessionId: `session-${callCount}`,
+				spec: `spec-v${callId}`,
+				changelog: `changelog entry ${callId}`,
+				commitMessage: `evolve step ${callId}`,
+				sessionId: `session-${callId}`,
 				costUsd: 0.01,
 			};
 		}),
@@ -31,6 +30,7 @@ describe("Orchestrator – parallel mode", () => {
 	let tmpDir: string;
 	let repoPath: string;
 	let stateFilePath: string;
+	let parsedState: Record<string, unknown>;
 
 	beforeAll(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "allium-orch-par-"));
@@ -53,9 +53,13 @@ describe("Orchestrator – parallel mode", () => {
 			stateFile: stateFilePath,
 			alliumBranch: "allium/evolution",
 			alliumSkillsPath: "/tmp/fake-skills",
+			autoConfirm: true,
 		});
 
 		await runEvolution(config);
+
+		// Parse state file once so individual tests don't each re-read from disk.
+		parsedState = JSON.parse(await readFile(stateFilePath, "utf-8")) as Record<string, unknown>;
 	}, 60_000);
 
 	afterAll(async () => {
@@ -78,19 +82,15 @@ describe("Orchestrator – parallel mode", () => {
 			expect(mergeCommits.length).toBe(2);
 		});
 
-		it("should have all segments marked complete in state file", async () => {
-			const raw = await readFile(stateFilePath, "utf-8");
-			const state = JSON.parse(raw);
-			const progressEntries = Object.values(state.segmentProgress) as Array<{ status: string }>;
+		it("should have all segments marked complete in state file", () => {
+			const progressEntries = Object.values(parsedState.segmentProgress as Record<string, { status: string }>);
 			for (const entry of progressEntries) {
 				expect(entry.status).toBe("complete");
 			}
 		});
 
-		it("should have 28 total steps", async () => {
-			const raw = await readFile(stateFilePath, "utf-8");
-			const state = JSON.parse(raw);
-			expect(state.totalSteps).toBe(28);
+		it("should have 28 total steps", () => {
+			expect(parsedState.totalSteps).toBe(28);
 		});
 	});
 

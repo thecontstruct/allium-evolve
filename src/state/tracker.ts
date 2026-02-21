@@ -50,16 +50,31 @@ export class StateTracker {
 	}
 
 	async load(): Promise<boolean> {
+		let raw: string;
 		try {
-			const raw = await readFile(this.stateFile, "utf-8");
+			raw = await readFile(this.stateFile, "utf-8");
+		} catch (err) {
+			const code = (err as NodeJS.ErrnoException)?.code;
+			if (code === "ENOENT") {
+				return false;
+			}
+			throw err;
+		}
+		try {
 			this.state = JSON.parse(raw) as EvolutionState;
 			return true;
 		} catch {
+			console.error(
+				`[allium-evolve] State file ${this.stateFile} exists but is unreadable, falling through to allium-branch detection`,
+			);
 			return false;
 		}
 	}
 
 	async save(): Promise<void> {
+		if (!this.state) {
+			throw new Error("StateTracker: Cannot save uninitialized state. Call load() or initState() first.");
+		}
 		await mkdir(dirname(this.stateFile), { recursive: true });
 		await writeFile(this.stateFile, JSON.stringify(this.state, null, 2), "utf-8");
 	}

@@ -3,31 +3,29 @@ import { exec } from "../utils/exec.js";
 export async function readSpecFromCommit(repoPath: string, alliumSha: string): Promise<string> {
 	const paths = ["spec.allium", "spec/_master.allium"];
 	for (const path of paths) {
+		let content: string;
 		try {
 			const { stdout } = await exec(`git show ${alliumSha}:${path}`, { cwd: repoPath });
-			const content = stdout.trim();
-			if (path === "spec/_master.allium") {
-				try {
-					const { stdout: lsTree } = await exec(`git ls-tree ${alliumSha} spec/`, { cwd: repoPath });
-					const lines = lsTree.trim().split("\n").filter(Boolean);
-					const moduleFiles = lines
-						.map((line) => line.split(/\s+/)[2])
-						.filter((name): name is string => typeof name === "string" && name.endsWith(".allium") && name !== "_master.allium");
-					if (moduleFiles.length > 0) {
-						throw new Error(
-							`Multi-file spec detected in allium commit ${alliumSha.slice(0, 8)}. --start-after does not yet support multi-file specs. Provide --seed-spec pointing to a single-file commit or flatten the spec.`,
-						);
-					}
-				} catch (err) {
-					if (err instanceof Error && err.message.includes("Multi-file spec")) {
-						throw err;
-					}
-				}
-			}
-			return content;
+			content = stdout.trim();
 		} catch {
 			continue;
 		}
+
+		if (path === "spec/_master.allium") {
+			const { stdout: lsTree } = await exec(`git ls-tree ${alliumSha} spec/`, { cwd: repoPath });
+			const lines = lsTree.trim().split("\n").filter(Boolean);
+			// git ls-tree format: <mode> <type> <object>\t<file> — index [3] is the filename
+			const moduleFiles = lines
+				.map((line) => line.split(/\s+/)[3])
+				.filter((name): name is string => typeof name === "string" && name.endsWith(".allium") && name !== "_master.allium");
+			if (moduleFiles.length > 0) {
+				throw new Error(
+					`Multi-file spec detected in allium commit ${alliumSha.slice(0, 8)}. Resuming from an allium branch with multi-file specs is not yet supported. Flatten the spec to a single file or use a commit with a single-file spec.`,
+				);
+			}
+		}
+
+		return content;
 	}
 	throw new Error(
 		`Could not read spec from allium commit ${alliumSha.slice(0, 8)}. Expected spec.allium or spec/_master.allium.`,

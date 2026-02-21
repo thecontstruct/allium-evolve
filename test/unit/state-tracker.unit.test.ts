@@ -29,6 +29,7 @@ function makeConfig(overrides: Partial<EvolutionConfig> = {}): EvolutionConfig {
 			sourceIgnorePatterns: [],
 			maxConcurrency: 5,
 		},
+		autoConfirm: false,
 		...overrides,
 	};
 }
@@ -418,7 +419,7 @@ describe("StateTracker", () => {
 		});
 	});
 
-	describe("UNIT-033: setShaMap and seedSegmentProgress for --start-after", () => {
+	describe("UNIT-033: setShaMap and seedSegmentProgress for allium-branch resume", () => {
 		it("setShaMap replaces shaMap", () => {
 			const tracker = new StateTracker(stateFilePath);
 			tracker.initState(makeConfig(), makeSegments(), "aaa111");

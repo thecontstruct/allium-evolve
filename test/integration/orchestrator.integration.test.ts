@@ -9,16 +9,16 @@ const execAsync = promisify(cpExec);
 
 vi.mock("../../src/claude/runner.js", async (importOriginal) => {
 	const actual = (await importOriginal()) as Record<string, unknown>;
-	let callCount = 0;
 	return {
 		...actual,
 		invokeClaudeForStep: vi.fn(async () => {
-			callCount++;
+			// callCount is scoped inside the factory so retries start from a clean state.
+			const callId = Math.random().toString(36).slice(2);
 			return {
-				spec: `spec-v${callCount}`,
-				changelog: `changelog entry ${callCount}`,
-				commitMessage: `evolve step ${callCount}`,
-				sessionId: `session-${callCount}`,
+				spec: `spec-v${callId}`,
+				changelog: `changelog entry ${callId}`,
+				commitMessage: `evolve step ${callId}`,
+				sessionId: `session-${callId}`,
 				costUsd: 0.01,
 			};
 		}),
@@ -31,6 +31,7 @@ describe("Orchestrator – sequential mode", () => {
 	let tmpDir: string;
 	let repoPath: string;
 	let stateFilePath: string;
+	let parsedState: Record<string, unknown>;
 
 	beforeAll(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "allium-orch-seq-"));
@@ -55,9 +56,13 @@ describe("Orchestrator – sequential mode", () => {
 			stateFile: stateFilePath,
 			alliumBranch: "allium/evolution",
 			alliumSkillsPath: "/tmp/fake-skills",
+			autoConfirm: true,
 		});
 
 		await runEvolution(config);
+
+		// Parse state file once so individual tests don't each re-read from disk.
+		parsedState = JSON.parse(await readFile(stateFilePath, "utf-8")) as Record<string, unknown>;
 	}, 60_000);
 
 	afterAll(async () => {
@@ -65,16 +70,15 @@ describe("Orchestrator – sequential mode", () => {
 	});
 
 	describe("INT-001: Full sequential run creates allium branch with correct commit count", () => {
-		it("should create allium commits for all original commits (tracked in state file)", async () => {
-			const raw = await readFile(stateFilePath, "utf-8");
-			const state = JSON.parse(raw);
+		it("should create allium commits for all original commits (tracked in state file)", () => {
 			// shaMap has one entry per original commit → allium commit mapping
-			expect(Object.keys(state.shaMap).length).toBe(28);
+			expect(Object.keys(parsedState.shaMap as Record<string, string>).length).toBe(28);
 		});
 
-		it("should have reachable commits from trunk tip (dead-end no longer updates ref)", async () => {
-			// After the fix, only trunk segments update the allium branch ref.
-			// trunk-2 is the last trunk segment (M2 through U = 17 commits) + trunk-1(3) + trunk-0(3) + branch-1(2) + branch-0(3) merge parents
+		it("should have reachable commits from the allium branch tip", async () => {
+			// The allium branch ref is updated by the last trunk segment (trunk segments write
+			// to refs/heads/allium/evolution). Branch (dead-end) segments do not update the ref
+			// directly but their commits become reachable via merge commit parents.
 			const { stdout } = await execAsync("git rev-list --count refs/heads/allium/evolution", { cwd: repoPath });
 			expect(Number.parseInt(stdout.trim(), 10)).toBeGreaterThan(10);
 		});
@@ -95,8 +99,8 @@ describe("Orchestrator – sequential mode", () => {
 
 	describe("INT-003: Merge commits on allium branch have two parents", () => {
 		it("should have at least 1 merge commit reachable from branch tip", async () => {
-			// In sequential mode the branch tip is the dead-end segment's tip.
-			// From there, only the M1 merge allium commit is reachable (not M2).
+			// In sequential mode, the allium branch ref points to the trunk tip.
+			// Merge commits are reachable through the branch history.
 			const { stdout } = await execAsync('git log refs/heads/allium/evolution --format="%H %P"', { cwd: repoPath });
 			const lines = stdout.trim().split("\n").filter(Boolean);
 			const mergeCommits = lines.filter((line) => {
@@ -107,12 +111,11 @@ describe("Orchestrator – sequential mode", () => {
 		});
 
 		it("should have 2 total merge commits across all allium objects (verified via state)", async () => {
-			const raw = await readFile(stateFilePath, "utf-8");
-			const state = JSON.parse(raw);
-			expect(state.completedMerges.length).toBe(2);
+			const completedMerges = parsedState.completedMerges as Array<{ alliumSha: string }>;
+			expect(completedMerges.length).toBe(2);
 
 			// Verify each recorded merge commit actually has 2 parents in git
-			for (const merge of state.completedMerges) {
+			for (const merge of completedMerges) {
 				const { stdout } = await execAsync(`git cat-file -p ${merge.alliumSha}`, { cwd: repoPath });
 				const parentLines = stdout.split("\n").filter((line: string) => line.startsWith("parent "));
 				expect(parentLines).toHaveLength(2);
@@ -131,16 +134,12 @@ describe("Orchestrator – sequential mode", () => {
 	});
 
 	describe("INT-004: State file is created with all segments marked complete", () => {
-		it("should create the state file", async () => {
-			const raw = await readFile(stateFilePath, "utf-8");
-			const state = JSON.parse(raw);
-			expect(state.version).toBe(1);
+		it("should create the state file", () => {
+			expect(parsedState.version).toBe(1);
 		});
 
-		it("should have all segments marked complete", async () => {
-			const raw = await readFile(stateFilePath, "utf-8");
-			const state = JSON.parse(raw);
-			const progressEntries = Object.values(state.segmentProgress) as Array<{ status: string }>;
+		it("should have all segments marked complete", () => {
+			const progressEntries = Object.values(parsedState.segmentProgress as Record<string, { status: string }>);
 			expect(progressEntries.length).toBeGreaterThan(0);
 			for (const entry of progressEntries) {
 				expect(entry.status).toBe("complete");
@@ -149,16 +148,12 @@ describe("Orchestrator – sequential mode", () => {
 	});
 
 	describe("INT-005: State file has correct total step count", () => {
-		it("should have totalSteps equal to 28 (one per original commit)", async () => {
-			const raw = await readFile(stateFilePath, "utf-8");
-			const state = JSON.parse(raw);
-			expect(state.totalSteps).toBe(28);
+		it("should have totalSteps equal to 28 (one per original commit)", () => {
+			expect(parsedState.totalSteps).toBe(28);
 		});
 
-		it("should have totalCostUsd matching step count * 0.01", async () => {
-			const raw = await readFile(stateFilePath, "utf-8");
-			const state = JSON.parse(raw);
-			expect(state.totalCostUsd).toBeCloseTo(0.28, 6);
+		it("should have totalCostUsd matching step count * 0.01", () => {
+			expect(parsedState.totalCostUsd as number).toBeCloseTo(0.28, 6);
 		});
 	});
 });
