@@ -93,12 +93,12 @@ describe("Segment runner + Merge runner isolation", () => {
 		defaultConfig = configMod.defaultConfig;
 
 		dag = await buildDag(repoPath);
-		await identifyTrunk(dag, repoPath, "master");
+		await identifyTrunk(dag, repoPath, "main");
 		segments = decompose(dag);
 
 		config = defaultConfig({
 			repoPath,
-			targetRef: "master",
+			targetRef: "main",
 			parallelBranches: false,
 			stateFile: join(tmpDir, "state.json"),
 			alliumBranch: "allium/evolution",

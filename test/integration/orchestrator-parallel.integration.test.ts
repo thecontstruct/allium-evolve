@@ -47,7 +47,7 @@ describe("Orchestrator – parallel mode", () => {
 
 		const config = defaultConfig({
 			repoPath,
-			targetRef: "master",
+			targetRef: "main",
 			parallelBranches: true,
 			maxConcurrency: 2,
 			stateFile: stateFilePath,

@@ -50,7 +50,7 @@ describe("Orchestrator – sequential mode", () => {
 
 		const config = defaultConfig({
 			repoPath,
-			targetRef: "master",
+			targetRef: "main",
 			parallelBranches: false,
 			stateFile: stateFilePath,
 			alliumBranch: "allium/evolution",
