@@ -1,0 +1,1885 @@
+-- axonify-labs-platform.allium
+--
+-- Scope: Database management CLI tooling, Testing standards and QA workflow,
+--        Cloud SQL Admin API integration, Secret Manager credential storage,
+--        Linting and code quality tooling, Cloud Build configuration,
+--        Credential generation and local/cloud storage, Database creation workflow,
+--        Database deletion workflow with safety safeguards,
+--        Cloud SQL Proxy configuration and health checking,
+--        Connection management with retry logic and latency measurement,
+--        Quality gate tracking for story validation,
+--        Migration generation from schema changes,
+--        Migration execution with transaction safety and environment-specific confirmations,
+--        Database status inspection with connection health and migration tracking,
+--        CLI command creation and argument validation utilities,
+--        Cloud Run deployment, build, log streaming, and service status inspection,
+--        Node.js version management and standardization,
+--        Root-level workspace scripts for developer convenience,
+--        Shared database operation utilities,
+--        Quick setup command combining database creation and migration,
+--        Comprehensive error handling with contextual errors and recovery guidance,
+--        Deployment integration with Cloud Run and Secret Manager validation,
+--        Service account permission management for runtime secret access,
+--        Deployment configuration validation with protected environment constraints,
+--        Pre-deployment secret validation with actionable error recovery,
+--        Superuser password management via Secret Manager,
+--        Shared GCP utilities package for cross-tooling reuse,
+--        GCP common package implementation with production-ready shared utilities,
+--        Multi-environment deployment configuration with type-safe environment-specific settings,
+--        Environment-aware deployment CLI commands requiring explicit environment arguments,
+--        Environment resolution with branch-based service naming for dev environment,
+--        Service name generation with fixed names for staging/prod and pattern-based names for dev,
+--        CLI global flags (--verbose, --debug) for enhanced logging,
+--        Database CLI refactoring to use gcp-common shared utilities,
+--        Unified environment configuration type system with discriminated unions,
+--        Cloud SQL credential management with secret name patterns,
+--        OAuth configuration management,
+--        Configuration preprocessing with placeholder substitution and resource name fitting,
+--        Database-specific secret naming separated from SecretManagerClient,
+--        Workspace orchestration scripts (build, watch, start) with environment-specific strategies,
+--        Docker Compose service lifecycle management,
+--        Build-time secret injection via Cloud Build and Secret Manager,
+--        Base URL resolution with Cloud Run environment detection,
+--        Data-driven environment protection via isProtected property,
+--        Centralized secret naming in gcp-common (formatDatabaseSecretName, parseDatabaseSecretName),
+--        Package finder utilities for workspace and package root resolution,
+--        Separator-configurable resource name generation (underscore for databases, hyphen for Cloud Run),
+--        Service account IAM permission granting for secret access,
+--        Cloud Run deployment with automatic traffic routing and Cloud SQL instance connection,
+--        Automatic environment variable configuration (CLOUD_RUN_URL, NEXT_PUBLIC_SITE_URL),
+--        OAuth redirect URI configuration guidance during deployment,
+--        Deployment package exports for cross-package programmatic usage,
+--        Standalone Next.js production server execution for Cloud Run deployment,
+--        Docker image tag sanitization with lowercase conversion and hyphen separator,
+--        Secret update capability with automatic versioning when secrets exist,
+--        Automatic IAM permission granting during credential storage,
+--        New revision creation and traffic routing after URL configuration updates,
+--        Deployment command for automated IAM permission grants across runtime secrets,
+--        Environment-aware base URL resolution with priority fallbacks,
+--        Migration hash computation using content-based SHA-256 hashing,
+--        Conflict-safe IAM policy updates preserving policy etags,
+--        Centralized target environment configuration with workspace-level config file,
+--        Type-safe environment configuration with discriminated unions and computed values,
+--        Content-type-aware signed URLs for GCS uploads,
+--        CORS configuration for GCS buckets with automatic updates,
+--        Three separate database credential secrets (username, password, DATABASE_URL),
+--        Build-time secret injection for application environment variables,
+--        Service Account Token Creator role for signed URL generation,
+--        Zod transformation for secret name interpolation in configuration,
+--        Storage abstraction layer with pluggable provider architecture,
+--        Google Cloud Storage (GCS) as default storage provider,
+--        GCS bucket creation and management with CORS configuration,
+--        GCS signed URL generation for direct client upload/download,
+--        GCS Application Default Credentials (ADC) authentication for local development,
+--        GCS service account authentication for production deployments,
+--        GCS provider implementation with v4 signed URLs and content-type awareness,
+--        GCS IAM permissions automation for service accounts,
+--        Automated bucket creation via setup-buckets CLI command,
+--        Automated permission grants via grant-permissions CLI command,
+--        Bucket-level and project-level IAM permission grants,
+--        Storage permission configuration in deployment configuration,
+--        Multi-bucket permission management with idempotent operations,
+--        Root-level deployment orchestration scripts for bucket setup and permission management,
+--        Dynamic Cloud Build configuration generation with environment-specific secret references,
+--        Runtime templating of cloudbuild.json with secret name substitution from environment config,
+--        Kaniko-based container builds with layer caching,
+--        Environment-specific cache repositories for isolated build caching,
+--        Direct image URL embedding in build configuration (no substitution variables),
+--        Compressed caching and snapshot optimization for faster builds,
+--        Direct bucket name injection into build arguments from environment configuration,
+--        Scripts package centralized configuration integration with gcp-common,
+--        Intelligent migration execution with pending migration detection,
+--        Universal Cloud SQL postgres password retrieval from Secret Manager,
+--        Unified credential storage accepting ResolvedTargetEnvironmentConfig,
+--        Simplified database operation signatures using config-driven parameters,
+--        Workspace-relative migration directory resolution,
+--        Context-aware environment variable management with build/runtime/script contexts,
+--        Environment data model unifying secrets and computed values with context tracking,
+--        Dynamic Dockerfile generation from templates with context-aware ARG/ENV injection,
+--        MinIO local development support with automatic S3-compatible provider routing,
+--        Storage provider selection based on environment configuration,
+--        Reactive user avatar component with session-aware rendering,
+--        Avatar upload with cache-busting URL generation,
+--        Comprehensive configuration documentation with interpolation patterns and troubleshooting,
+--        Configuration guide covering file structure, ComputedStringValue pattern, and environment-specific examples,
+--        Tool README cross-linking to centralized configuration documentation,
+--        Dependency version management for Zod validation library, OpenAI SDK, Next.js framework, and React library,
+--        MySQL 8.4 database engine with mysql2 driver and connection pooling,
+--        Drizzle ORM MySQL dialect configuration with mysqlTable definitions,
+--        MySQL-specific schema management with camelCase column naming,
+--        MySQL migration generation producing MySQL-compatible DDL,
+--        Thunderball-compatible core tables (tenant, user, location) with full audit columns,
+--        Organization-to-tenant domain model migration with bigint primary keys,
+--        Multi-tenant data isolation via tenant_id foreign keys with cascade deletes,
+--        Membership-based authorization with role evaluation from target tenant context,
+--        SMS concierge integration with Twilio A2P 10DLC messaging,
+--        SMS feedback categorization with AI classification and manual override,
+--        Feedback analytics dashboard with confidence scoring and export,
+--        Cursor Cloud Agent environment with BMAD framework integration,
+--        Admin dashboard with tenant management, user creation, and location hierarchy,
+--        Boundary sanitization layer for web ingress points,
+--        Tenant-scoped admin authorization guard preventing cross-tenant escalation,
+--        Cloud Run dual URL format support with trusted origins configuration,
+--        Authentication trusted origins management for hash-based and project-number-based Cloud Run URLs,
+--        Automatic trusted origins derivation from BETTER_AUTH_TRUSTED_ORIGINS environment variable,
+--        Deployment-time trusted origins injection with GCP project number resolution,
+--        Project-number-based service URL fallback when URL retrieval fails,
+--        Trusted origins utilities module with buildTrustedOriginsEnv and getProjectNumber extraction,
+--        Unit test coverage for trusted origins utilities with mock gcloud interactions,
+--        Custom domain support for Cloud Run deployments with flexible URL resolution,
+--        Custom domain configuration in environment config with HTTPS URL validation,
+--        Custom domain override for NEXT_PUBLIC_SITE_URL and CLOUD_RUN_URL,
+--        Trusted origins expansion to include custom domain alongside Cloud Run URLs,
+--        Documentation updates for authentication and deployment environment variable configuration,
+--        Environment example configuration documentation for local development URL setup,
+--        Application rebranding from "Axonify Labs" to "Tempo",
+--        Feedback operational dashboard with multi-dimensional filtering (urgency, target, date range, store),
+--        URL state management for feedback filters via nuqs with shareable filter URLs,
+--        Default filter configuration for actionable feedback (immediate + store + last 30 days),
+--        Visual highlighting for urgent feedback with subtle amber styling,
+--        Feedback CSV export with active filter preservation
+-- Includes: DatabaseInstance, Migration, CLI commands, credential management,
+--           git branch detection, environment resolution and validation,
+--           saga-based creation, pre-flight dependency checks, info command
+--           (read-only configuration display), testing standards,
+--           test naming conventions, test file structure, QA agent workflow,
+--           story documentation requirements, Cloud SQL Admin API client wrapper,
+--           API error translation, retry logic, instance validation,
+--           Secret Manager client wrapper, secure credential storage,
+--           secret lifecycle management, secret naming conventions,
+--           parallel linting (Biome + markdownlint), markdown lint rules,
+--           Cloud Build template generation, credential generation and storage,
+--           secure password generation, connection URL formatting, unified storage,
+--           local PostgreSQL operations, user/privilege management, saga rollback,
+--           database deletion with active connection management, environment-specific
+--           confirmations, credential cleanup, deletion saga with progress tracking,
+--           Cloud SQL Proxy Docker Compose service, proxy health checking,
+--           database connection management with retry and latency measurement,
+--           quality gate decisions for story validation, migration generation command,
+--           Drizzle Kit integration, schema validation, migration file detection,
+--           idempotent migration generation, migration execution command,
+--           pre-flight checks (connection and pending transaction detection),
+--           pending migration detection via __drizzle_migrations table comparison,
+--           environment-specific confirmation prompts with type-to-confirm for staging/prod,
+--           transaction-based migration execution with automatic rollback,
+--           migration tracking table updates, error handling with recovery guidance,
+--           database status command with connection health checks, database metadata queries,
+--           migration status tracking, SSL verification, read-only status inspection,
+--           CLI argument validation using Zod schemas, command creation with validation wrapper,
+--           Cloud Run deployment via gcloud CLI, Cloud Build image compilation,
+--           Cloud Run log streaming with severity filtering, service status inspection,
+--           native Node.js TypeScript execution with explicit .ts imports,
+--           Node.js version specification via .nvmrc for consistent runtime across environments,
+--           root-level pnpm workspace scripts (db:info, db:create, db:delete, db:generate,
+--           db:migrate, db:status, db:setup) for convenient CLI access,
+--           shared database operation utilities (checkDatabaseExists, createDatabaseWithUser,
+--           deleteDatabaseIfExists, confirmStagingProdCreation, confirmDevForceRecreation,
+--           confirmStagingProdOperation, createSuperuserConnection, initializeCommand,
+--           displayDatabaseCreationSuccess, handleDatabaseCreationError,
+--           checkStagingProdDatabaseProtection) for code reuse and maintainability,
+--           quick setup command orchestrating database creation and migration in a single step,
+--           centralized error handling with custom error classes (ContextualError, GCPError,
+--           ConfigurationError, DependencyError, NetworkError, DatabaseError, MigrationError),
+--           error context enrichment with service/environment/field metadata,
+--           actionable recovery steps for all error scenarios,
+--           colored terminal output for errors with debug mode support,
+--           dependency checking utilities (Docker, gcloud, git) with conditional execution,
+--           network diagnostics differentiating Docker/proxy/timeout issues,
+--           GCP error translation with IAM permission details,
+--           error code standardization (ERR_CATEGORY_CODE pattern) for searchability,
+--           deployment secret validation before Cloud Run deployment,
+--           deployment configuration validation with branch-environment alignment,
+--           protected environment constraints (scaling, VPC, branch restrictions),
+--           quality gate evaluation for story completion tracking,
+--           data-driven environment protection (isProtected property on EnvironmentConfig),
+--           protection-aware confirmations (confirmProtectedEnvironmentOperation,
+--           checkProtectedDatabaseExists, validateProtectedEnvironment),
+--           centralized secret naming (formatDatabaseSecretName, parseDatabaseSecretName),
+--           package finder utilities (findPackageRoot, findWorkspaceRoot, findByMarker),
+--           workspace orchestration scripts (build.ts, watch.ts, start.ts),
+--           Docker Compose service lifecycle management,
+--           build-time secret injection for Next.js build process,
+--           base URL resolution with multi-environment support,
+--           Cloud Run deployment with OAuth configuration and traffic routing,
+--           deployment scripts with dotenv environment loading,
+--           standalone Next.js server execution via .next/standalone output,
+--           branch name sanitization to lowercase with configurable separators,
+--           secret value updates via addSecretVersion API,
+--           IAM permission grants with conflict-free policy updates preserving etag,
+--           post-deployment revision updates with URL environment variables,
+--           traffic migration to latest revision after configuration updates,
+--           grant-permissions command for bulk IAM policy management across secrets,
+--           base URL priority resolution (NEXT_PUBLIC_SITE_URL, CLOUD_RUN_URL, K_SERVICE detection, localhost fallback),
+--           runtime secret configuration via deployment config runtimeSecrets array,
+--           Cloud Run service account configuration in deployment environment settings,
+--           migration hash computation using content-based SHA-256 digest,
+--           IAM policy etag preservation for concurrent modification prevention,
+--           dynamic Cloud Build configuration generation with Kaniko caching,
+--           environment-specific build cache repositories,
+--           context-aware environment variable filtering (build/runtime/script),
+--           Dockerfile template generation with ARG/ENV placeholder injection,
+--           storage provider abstraction (GCS and S3/MinIO),
+--           GCS bucket setup and CORS configuration automation,
+--           GCS signed URL generation with content-type awareness,
+--           storage permission configuration and automation,
+--           reactive user avatar with session-aware rendering,
+--           avatar cache-busting URL generation,
+--           centralized configuration documentation and cross-linking,
+--           Zod v4 schema validation with backward compatibility,
+--           OpenAI SDK v6 integration for AI features,
+--           Next.js v15.5 framework for application runtime,
+--           React v19.1 library for UI component rendering,
+--           multi-tenant membership-based authorization model,
+--           Thunderball-compatible user/member/tenant entities,
+--           SMS concierge workflow with Twilio webhook processing,
+--           feedback classification with AI confidence scoring,
+--           admin dashboard with analytics and feedback management,
+--           Cursor Cloud Agent BMAD framework integration,
+--           boundary sanitization for web ingress points,
+--           trusted origins configuration for better-auth CSRF protection,
+--           project number extraction for Cloud Run URL construction,
+--           defensive service URL resolution with project-number fallback,
+--           trusted origins utility module (trusted-origins.ts) with extracted helpers,
+--           unit test coverage for buildTrustedOriginsEnv and getProjectNumber,
+--           custom domain configuration in CloudRunConfig type,
+--           custom domain override logic in deployment flow,
+--           custom domain inclusion in trusted origins list,
+--           deployment documentation covering custom domain and URL environment variables,
+--           environment example configuration for local development NEXT_PUBLIC_SITE_URL,
+--           centralized configuration with application name property (appName),
+--           feedback filter state management with URL persistence,
+--           default feedback filtering optimized for store managers,
+--           store selector with tenant-scoped location filtering,
+--           date range filtering with browser timezone-aware defaults,
+--           feedback export endpoint integration with active filter forwarding
+-- Status: Stories 3.3 (Migration Generation), 3.4 (Migration Execution), 3.5 (Database Status),
+--         4.1 (Root-Level Workspace Scripts), 4.2 (Comprehensive Error Handling),
+--         4.3 (Deployment Integration), 5.6 (Refactor Database CLI to Use GCP Common),
+--         5.7 (Documentation and Developer Guide), 5.8 (Data-Driven Environment Protection),
+--         Stories 8.1, 8.4, 8.5 (Cloud Run deployment refinements) completed with QA PASS,
+--         comprehensive test coverage, all acceptance criteria validated, production-ready implementations,
+--         CLI utilities package established for argument validation and command creation,
+--         native Node.js execution enabled (no tsx runtime required),
+--         Node.js version 23 standardized via .nvmrc and Docker base images,
+--         shared database operation utilities extracted for DRY principles,
+--         root-level workspace scripts provide convenient access to database CLI from project root,
+--         setup command enables one-step database creation and migration workflow,
+--         centralized error handling with rich context and recovery guidance,
+--         deployment integration with Secret Manager validation established,
+--         Story 5.6: 366 tests passing (100%), 74.77% coverage, all 9 acceptance criteria met,
+--         24 files migrated to gcp-common imports, 4 redundant utility files deleted,
+--         formatSecretName extracted then centralized in gcp-common as formatDatabaseSecretName,
+--         Story 5.7: 95/100 quality score, comprehensive documentation created including
+--         deployment-workflow.md (683 lines), migration-guide.md (687 lines), Epic 5 README (448 lines),
+--         11 deployment scripts added to root package.json,
+--         Story 5.8: 90/100 quality score, 610/610 tests passing (100%),
+--         isProtected property replaces 9 brittle environment checks,
+--         all deprecated environment-name-based functions removed,
+--         standalone Next.js output used for Cloud Run production deployment,
+--         Docker tag sanitization ensures RFC 1123 compliance via lowercase conversion,
+--         Secret Manager updates preserve existing secrets with new versions,
+--         IAM permission grants are idempotent and conflict-safe,
+--         Post-deployment configuration updates trigger new revisions with traffic migration,
+--         Base URL resolution follows priority chain for reliable runtime URL detection,
+--         Migration tracking uses SHA-256 content hashes for idempotent comparison,
+--         IAM policy updates preserve etag to prevent concurrent modification conflicts,
+--         Zod upgraded to v4.1.8 across tooling packages (database, deploy, gcp-common),
+--         OpenAI SDK upgraded to v6.6.0 for AI and API packages,
+--         Next.js upgraded to v15.5.7 across application and tooling packages,
+--         React upgraded to v19.1.2 across application packages,
+--         Project number resolution extracted for reusability,
+--         Service URL fallback logic uses project number when describe command returns empty,
+--         Trusted origins utilities extracted to dedicated module for testability,
+--         Unit tests added for buildTrustedOriginsEnv covering all edge cases,
+--         Unit tests added for getProjectNumber with successful and failure scenarios,
+--         Custom domain support implemented for staging and production environments,
+--         Custom domain configuration supports HTTPS URL override for public-facing addresses,
+--         Trusted origins automatically include custom domain when configured,
+--         OAuth redirect URIs work with custom domain and both Cloud Run URL formats,
+--         Documentation updated for authentication environment variables (BETTER_AUTH_TRUSTED_ORIGINS),
+--         Documentation updated for deployment-managed environment variables (CLOUD_RUN_URL, NEXT_PUBLIC_SITE_URL),
+--         Documentation clarifies NEXT_PUBLIC_SITE_URL or NEXT_PUBLIC_APP_URL for local development,
+--         Environment example file documents NEXT_PUBLIC_SITE_URL with local development default,
+--         Application rebranded from "Axonify Labs" to "Tempo" in centralized configuration,
+--         Feedback operational dashboard filtering implemented with urgency/target/date/store filters,
+--         Default feedback view optimized for store managers (immediate + store + last 30 days),
+--         Visual feedback highlighting for urgent items with subtle amber border and background,
+--         Feedback export functionality integrated with active filter preservation,
+--         URL state management for feedback filters enables shareable and bookmarkable filtered views
+-- Excludes:
+--   - ORM internals (Drizzle schema details, query building)
+--   - CI/CD pipeline configuration
+--   - Test implementation details (Vitest/Playwright internals)
+--   - Test framework configuration syntax
+--   - Specific test assertions and matchers
+--   - TypeScript compilation and build tooling
+--   - Actual file storage and retrieval operations (domain focuses on provider abstraction)
+--   - Image generation and processing pipelines
+--   - Feature-specific file upload flows (e.g., Shopkit image uploads)
+
+------------------------------------------------------------
+-- External Entities (Infrastructure)
+------------------------------------------------------------
+
+external entity CloudSQLInstance {
+    -- Google Cloud SQL database instance managed by GCP
+    project: String
+    instance: String
+    region: String
+}
+
+external entity SecretManager {
+    -- Google Cloud Secret Manager for credential storage
+    -- Accessed via @google-cloud/secret-manager SDK (SecretManagerServiceClient)
+}
+
+external entity DrizzleSchema {
+    -- Application schema definition managed by Drizzle ORM
+}
+
+external entity GitRepository {
+    -- Git repository providing branch context
+}
+
+external entity TestFramework {
+    -- Test execution framework (Vitest for unit/integration, Playwright for e2e)
+}
+
+external entity CloudSQLAdminAPI {
+    -- Google Cloud SQL Admin API for programmatic database management
+    -- Accessed via @google-cloud/sql SDK (SqlDatabasesServiceClient, SqlInstancesServiceClient, SqlUsersServiceClient)
+}
+
+external entity MarkdownLintCLI {
+    -- markdownlint-cli2 tool for markdown file validation and formatting
+    -- Configured via .markdownlint-cli2.yaml
+}
+
+external entity NpmRunAll {
+    -- npm-run-all2 package for running multiple npm scripts in parallel or sequentially
+    -- Uses 'run-p' command for parallel execution
+}
+
+external entity CloudBuild {
+    -- Google Cloud Build service for compiling Docker images
+    -- Configured via cloudbuild.yaml/cloudbuild.json templates
+    -- Supports build-time secret injection via availableSecrets and secretEnv mappings
+    -- Accepts explicit --project parameter for GCP project context
+    -- BUILD_ID environment variable indicates execution within Cloud Build
+}
+
+external entity FileSystem {
+    -- Node.js file system for local credential storage
+    -- Accessed via fs module (synchronous operations for CLI)
+}
+
+external entity NodeCrypto {
+    -- Node.js crypto module for cryptographically secure random generation and hashing
+    -- Used for password generation and migration content hash computation
+}
+
+external entity PostgreSQLClient {
+    -- PostgreSQL client library (pg ^8.13.1) for database operations
+    -- Uses pg.Client with connectionTimeoutMillis, SSL settings, and connection state management
+    -- Used for Docker PostgreSQL and Cloud SQL Proxy database management
+}
+
+external entity CentralConfig {
+    -- Central configuration from @repo/config
+    -- ES module package ("type": "module") with explicit exports field (".": "./index.ts")
+    -- Provides appName (String) for application branding and projectSlug (String) for resource naming
+    -- appName value: "Tempo" (rebranded from "Axonify Labs")
+    -- projectSlug defaults to process.env.PROJECT_SLUG || 'axonify_labs'
+    -- Imported using explicit .ts extension in ES module context
+}
+
+external entity PromptsLibrary {
+    -- prompts 2.x package for interactive user confirmations
+    -- Used for environment-specific deletion confirmations and migration confirmations
+}
+
+external entity CloudSQLProxy {
+    -- Google Cloud SQL Proxy service for mediating connections to Cloud SQL instances
+    -- Runs as Docker container: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2
+    -- Listens on localhost:5433
+    -- Requires GCP Application Default Credentials
+}
+
+external entity Ora {
+    -- ora ^8.1.1 package for terminal spinner UI feedback
+    -- Provides states: spinning, succeeded, failed, warned
+    -- Used for visual progress feedback during saga operations and deployment commands
+}
+
+external entity DrizzleKit {
+    -- Drizzle Kit CLI and programmatic API for migration generation
+    -- Version 0.31.x (programmatic API limited, CLI subprocess used)
+    -- Generates migrations via 'drizzle-kit generate' command
+    -- Reads schema from configurable path, outputs SQL migration files
+}
+
+external entity DrizzleORM {
+    -- Drizzle ORM library for database operations and migration execution
+    -- Version 0.44.x with node-postgres driver integration
+    -- Provides migrate() function for transaction-based migration execution
+    -- Automatically manages __drizzle_migrations tracking table
+}
+
+external entity PostgreSQLSystemCatalog {
+    -- PostgreSQL system catalogs for database metadata queries
+    -- pg_database_size, pg_size_pretty, information_schema.tables, pg_stat_activity
+    -- Used for read-only status inspection
+}
+
+external entity Yargs {
+    -- yargs package for CLI command parsing and builder patterns
+    -- Provides Argv type and command configuration DSL
+    -- Used for defining CLI commands with typed arguments
+}
+
+external entity Zod {
+    -- zod package for runtime schema validation
+    -- Version 4.1.8 (upgraded from 3.x for enhanced type safety and new features)
+    -- Provides z.object() and various type validators
+    -- Used for validating CLI arguments, API requests, and environment configuration
+    -- Backward compatible with OpenAI SDK v6 peer dependency (^3.25 || ^4.0)
+}
+
+external entity CloudRunService {
+    -- Google Cloud Run service for deploying and running containers
+    -- Managed via gcloud CLI (gcloud run deploy, gcloud run services describe)
+    -- Supports traffic routing, OAuth configuration, Cloud SQL connections
+    -- Consumes database credentials via Secret Manager secret references at runtime
+    -- Serves same service on dual URL formats (hash-based and project-number-based)
+}
+
+external entity GCloudCLI {
+    -- Google Cloud SDK CLI (gcloud) for GCP service interaction
+    -- Used for Cloud Build submissions, Cloud Run deployments,
+    -- log streaming, and service status inspection
+    -- Requires installation and authentication (gcloud auth)
+    -- Supports project metadata queries (projects describe --format=value(projectNumber))
+}
+
+external entity NodeJSRuntime {
+    -- Native Node.js runtime for executing TypeScript files
+    -- Version >=23.6 required (specified via .nvmrc at project root)
+    -- Docker base images use Node.js 23 for both dependency installation and production runtime
+    -- Supports direct .ts file execution without transpilation
+    -- Requires explicit .ts file extensions in ES module imports
+}
+
+external entity NVM {
+    -- Node Version Manager for specifying and switching Node.js versions
+    -- Reads .nvmrc file at project root to determine required Node.js version
+    -- Used for ensuring consistent runtime environment across development machines
+}
+
+external entity PnpmWorkspace {
+    -- pnpm workspace for monorepo package management
+    -- Supports --filter flag for targeting specific packages
+    -- Used for root-level script delegation to CLI packages
+}
+
+external entity Chalk {
+    -- chalk package for terminal string styling and colored output
+    -- Used for formatting error messages with colors (red, yellow, cyan, gray)
+    -- Provides visual hierarchy in error display
+}
+
+external entity NodeChildProcess {
+    -- Node.js child_process module for executing shell commands
+    -- Used for dependency checking (docker --version, gcloud --version, git --version)
+    -- Accessed via promisify(exec) for async/await pattern
+}
+
+external entity GCPCommonLibrary {
+    -- @repo/gcp-common package providing shared GCP utilities
+    -- Exports: SecretManagerClient, formatDatabaseSecretName, parseDatabaseSecretName,
+    --          getCurrentBranch, sanitizeBranchName, generateResourceName,
+    --          isRemoteEnvironment, logger, ResolvedTargetEnvironmentConfig type,
+    --          findPackageRoot, findWorkspaceRoot, findByMarker, readPackageJson,
+    --          isProtected (EnvironmentConfig property),
+    --          getTargetEnvironmentConfig, loadConfig
+    -- Used by database CLI, deploy tooling, scripts package, and workspace scripts
+    -- Single source of truth for secret naming, git utilities, and environment configuration
+}
+
+external entity DeploymentTooling {
+    -- tooling/deploy package for Cloud Run deployment integration
+    -- Integrates with database CLI for Secret Manager validation
+    -- Accessed via root-level deploy:* scripts
+}
+
+external entity DockerCompose {
+    -- Docker Compose for local service orchestration
+    -- Services: axonify-labs-postgres, axonify-labs-minio, axonify-labs-cloud-sql-proxy
+    -- Managed via docker-compose up -d, docker-compose ps
+    -- Used by workspace orchestration scripts for local development
+}
+
+external entity DotenvCLI {
+    -- dotenv-cli package providing dotenv -c wrapper
+    -- Loads environment variables from .env files before executing commands
+    -- Used by root-level workspace scripts and deployment scripts
+}
+
+external entity TurboRepo {
+    -- Turborepo build system for monorepo task orchestration
+    -- Provides turbo build, turbo dev, turbo test commands
+    -- Used by workspace orchestration scripts for local builds
+}
+
+external entity NextJSStandaloneServer {
+    -- Next.js standalone server output for production deployment
+    -- Generated by Next.js build with output: 'standalone' configuration
+    -- Located at .next/standalone/apps/web/server.js
+    -- Self-contained Node.js server with minimal dependencies
+    -- Used for Cloud Run production deployment
+}
+
+external entity CloudBuildConfig {
+    -- Generated cloudbuild.json configuration structure
+    -- Contains build steps, available secrets, and timeout settings
+    -- Dynamically generated from environment configuration
+    build_steps: List<BuildStep>
+    available_secrets: SecretManagerSecrets
+    timeout: Duration
+}
+
+external entity SecretManagerSecrets {
+    -- Available secrets configuration for Cloud Build
+    -- Maps secret environment variable names to Secret Manager resource paths
+    secret_env: Map<String, String>
+}
+
+external entity Kaniko {
+    -- Kaniko containerized image builder for Cloud Build
+    -- Supports layer caching via --cache and --cache-repo flags
+    -- Image: gcr.io/kaniko-project/executor:latest
+    -- Produces Docker images without Docker daemon dependency
+}
+
+external entity DockerfileTemplate {
+    -- Templated Dockerfile for Next.js application container
+    -- Template placeholders: {{BUILD_ARGS}}, {{ENV_VARS}}
+    -- Runtime substitution from environment configuration
+}
+
+external entity MinIO {
+    -- MinIO S3-compatible object storage for local development
+    -- Container: minio/minio with MINIO_ROOT_USER and MINIO_ROOT_PASSWORD
+    -- Accessed via AWS SDK with S3 compatibility mode
+}
+
+external entity GCSBucket {
+    -- Google Cloud Storage bucket for production file storage
+    -- Configured with CORS rules for direct client upload/download
+    -- IAM permissions granted to Cloud Run service accounts
+}
+
+external entity AWSSDKv3 {
+    -- AWS SDK v3 for S3/MinIO client operations
+    -- Used for local development with MinIO
+    -- Supports S3-compatible endpoints and credentials
+}
+
+external entity GoogleCloudStorageSDK {
+    -- @google-cloud/storage SDK for GCS operations
+    -- Used for production GCS interactions
+    -- Supports Application Default Credentials and service account authentication
+}
+
+external entity BetterAuth {
+    -- better-auth library for authentication and session management
+    -- Provides baseURL and trustedOrigins configuration for CSRF protection
+    -- Version: Latest stable (configured in package.json)
+}
+
+external entity SessionContext {
+    -- Next.js session context providing user authentication state
+    -- Accessed via useSession() hook
+    -- Provides session.user with id, name, email, image properties
+}
+
+external entity TwilioWebhook {
+    -- Twilio webhook endpoint for incoming SMS messages
+    -- Payload: From, To, Body, MessageSid
+    -- Validates request signature for security
+}
+
+external entity OpenAIAPI {
+    -- OpenAI API for AI-powered text classification
+    -- SDK version 6.6.0
+    -- Used for feedback categorization with confidence scoring
+}
+
+external entity DrizzleMySQL {
+    -- Drizzle ORM MySQL dialect for MySQL 8.4 database
+    -- Uses mysql2 driver with connection pooling
+    -- Provides mysqlTable, bigint, varchar, text, timestamp, index functions
+}
+
+external entity MySQL84 {
+    -- MySQL 8.4 database engine
+    -- Connection via mysql2 driver
+    -- Supports full ACID transactions and InnoDB storage engine
+}
+
+external entity CloudSQLMySQL {
+    -- Google Cloud SQL MySQL instance
+    -- Version 8.4
+    -- Accessed via Cloud SQL Proxy or public IP with SSL
+}
+
+external entity DNSProvider {
+    -- DNS provider for custom domain name resolution
+    -- Maps custom domains (e.g., staging.labs.axonify.net, app.labs.axonify.net) to Cloud Run services
+    -- Requires CNAME or A record configuration pointing to Cloud Run URL
+}
+
+external entity EnvironmentExampleFile {
+    -- env.example file providing documentation for environment variables
+    -- Documents required and optional environment variables with examples
+    -- Serves as template for creating .env files in local development
+    -- Includes comments for deployment-managed vs. developer-managed variables
+}
+
+external entity NuqsLibrary {
+    -- nuqs package for URL query state management
+    -- Version 2.x with chained .withOptions() API
+    -- Provides useQueryState hook with parseAsString, parseAsInteger parsers
+    -- Supports history: 'replace' option for URL updates without browser history pollution
+    -- Synchronizes React component state with URL search parameters
+}
+
+------------------------------------------------------------
+-- Enums
+------------------------------------------------------------
+
+enum Environment { dev | staging | production }
+-- Deployment environment classification
+
+enum DatabaseStatus { creating | ready | deleting | failed }
+-- Lifecycle status of a database instance
+
+enum MigrationStatus { pending | applied | failed }
+-- Status of a database migration
+
+enum ProtectionLevel { none | confirmation_required | production_locked }
+-- Database and environment protection level
+
+enum CommandType { create | delete | migrate | generate | status | info | setup }
+-- CLI command classification
+
+enum QualityGateStatus { not_started | in_progress | passed | failed | skipped }
+-- Status of a quality gate in the story validation workflow
+
+enum DependencyType { required | optional }
+-- Classification of external dependencies (Docker, gcloud, git)
+
+enum ConnectionHealthStatus { healthy | degraded | failed }
+-- Database connection health classification
+
+enum LogSeverity { debug | info | warning | error }
+-- Structured logging severity levels
+
+enum ConfirmationStyle { simple | type_to_confirm }
+-- User confirmation prompt style (simple yes/no vs. typing full word)
+
+enum TestType { unit | integration | e2e }
+-- Test classification for different testing strategies
+
+enum EnvironmentContext { build | runtime | script }
+-- Context for environment variable usage (build-time, runtime, or script execution)
+
+enum StorageProvider { gcs | s3 | minio }
+-- Available storage backend providers
+
+enum SignedURLPurpose { upload | download }
+-- Purpose of signed URL generation
+
+enum IAMPermissionScope { bucket | project }
+-- Scope of IAM permission grants (bucket-level or project-level)
+
+enum TrustedOriginsSource { explicit_env_var | derived_from_base_url }
+-- Source for trusted origins configuration in better-auth
+
+enum CloudRunURLFormat { hash_based | project_number_based }
+-- Cloud Run URL format variants (hash-based or project-number-based)
+
+enum FeedbackCategory { positive | negative | neutral | question | spam }
+-- SMS feedback categorization
+
+enum FeedbackClassificationSource { ai | manual }
+-- Source of feedback classification
+
+enum TenantRole { owner | admin | member | viewer }
+-- Tenant membership roles for authorization
+
+enum URLResolutionStrategy { describe_api | project_number_fallback | error }
+-- Strategy for resolving Cloud Run service URLs during deployment
+
+enum FeedbackUrgency { immediate | medium | longer }
+-- Feedback urgency level for operational prioritization
+
+enum FeedbackTarget { store | hq }
+-- Feedback routing target (store-level or headquarters)
+
+------------------------------------------------------------
+-- Value Objects
+------------------------------------------------------------
+
+value DatabaseCredentials {
+    username: String
+    password: String
+    database_url: String
+}
+-- Complete set of database access credentials
+
+value SecretReference {
+    project: String
+    name: String
+    version: String = "latest"
+}
+-- Reference to a Secret Manager secret
+
+value ConnectionConfig {
+    host: String
+    port: Integer
+    database: String
+    user: String
+    password: String
+    ssl: Boolean
+}
+-- Database connection parameters
+
+value EnvironmentConfig {
+    name: Environment
+    project: String
+    region: String
+    is_protected: Boolean
+}
+-- Environment-specific GCP configuration
+
+value MigrationFile {
+    filename: String
+    hash: String
+    content: String
+}
+-- Physical migration file with content hash
+
+value TestConvention {
+    file_pattern: String
+    naming_convention: String
+    required_describes: List<String>
+}
+-- Testing standard conventions
+
+value ErrorContext {
+    service: String
+    environment: String
+    field: String?
+    recovery_steps: List<String>
+}
+-- Rich error context for debugging
+
+value QualityGate {
+    name: String
+    status: QualityGateStatus
+    criteria: List<String>
+    evidence: String?
+}
+-- Quality gate for story validation
+
+value DeploymentConfig {
+    service_name: String
+    image: String
+    environment_variables: Map<String, String>
+    runtime_secrets: List<SecretReference>
+    cloud_sql_instances: List<String>
+}
+-- Cloud Run deployment configuration
+
+value ResourceNameConfig {
+    prefix: String
+    separator: String    -- underscore for databases, hyphen for Cloud Run
+    max_length: Integer
+}
+-- Configuration for resource name generation
+
+value SecretNamePattern {
+    pattern: String  -- e.g., "{project_slug}_{environment}_{database_name}_{credential_type}"
+    interpolation_fields: List<String>
+}
+-- Pattern for database secret naming in Secret Manager
+
+value CloudBuildTemplate {
+    steps: List<BuildStep>
+    secrets: List<SecretReference>
+    timeout: Duration
+    cache_config: CacheConfig?
+}
+-- Cloud Build configuration template
+
+value BuildStep {
+    name: String        -- Docker image for the build step
+    args: List<String>  -- Command arguments
+    env: Map<String, String>
+    secret_env: Map<String, String>?
+}
+-- Individual build step in Cloud Build pipeline
+
+value CacheConfig {
+    cache_repo: String
+    cache_ttl: Duration?
+}
+-- Kaniko cache configuration
+
+value ComputedStringValue {
+    template: String
+    context: EnvironmentContext
+    requires_secret_interpolation: Boolean
+}
+-- Configuration value with placeholder substitution and context awareness
+
+value StoragePermissionConfig {
+    bucket: String
+    service_account: String
+    roles: List<String>
+    scope: IAMPermissionScope
+}
+-- Configuration for storage IAM permissions
+
+value SignedURLConfig {
+    action: SignedURLPurpose
+    expires: Duration
+    content_type: String?
+}
+-- Configuration for GCS signed URL generation
+
+value CORSConfig {
+    allowed_origins: List<String>
+    allowed_methods: List<String>
+    max_age_seconds: Integer
+}
+-- CORS configuration for GCS buckets
+
+value TrustedOrigins {
+    source: TrustedOriginsSource
+    origins: List<String>
+    delimiter: String
+    origins_string: String = origins.join(delimiter)
+}
+-- Multiple trusted origins for CSRF protection in better-auth
+
+value CloudRunDualURLs {
+    hash_based_url: String
+    project_number_based_url: String
+    primary: CloudRunURLFormat
+    both_formats_differ: hash_based_url != project_number_based_url
+}
+-- Cloud Run dual URL formats requiring trusted origins configuration
+
+value GCPProjectMetadata {
+    project_id: String
+    project_number: String
+    region: String
+    is_resolved: project_number != null and project_number != ""
+}
+-- GCP project metadata including project number for URL generation
+
+value AuthConfiguration {
+    base_url: String
+    trusted_origins: TrustedOrigins
+    better_auth_trusted_origins_env_var: String = "BETTER_AUTH_TRUSTED_ORIGINS"
+    trusted_origins_delimiter_pattern: String = "[|,]"
+    trusted_origins_separator: String = "|"
+}
+-- Configuration for better-auth including trusted origins
+
+value FeedbackClassification {
+    category: FeedbackCategory
+    source: FeedbackClassificationSource
+    confidence_score: Float?  -- 0.0 to 1.0, only for AI classifications
+    classified_at: Timestamp
+}
+-- Result of feedback categorization
+
+value TenantContext {
+    tenant_id: String
+    role: TenantRole
+    can_manage_users: Boolean
+    can_manage_locations: Boolean
+}
+-- Authorization context within a tenant
+
+value ServiceURLResolution {
+    strategy: URLResolutionStrategy
+    resolved_url: String?
+    requires_project_number: Boolean
+    fallback_attempted: Boolean
+}
+-- Result of service URL resolution during deployment
+
+value CustomDomainConfig {
+    url: String  -- Full HTTPS URL (e.g., https://staging.example.com)
+    is_configured: Boolean
+    overrides_cloud_run_url: Boolean
+}
+-- Custom domain configuration for Cloud Run services
+
+value EnvironmentVariableDocumentation {
+    variable_name: String
+    example_value: String
+    description: String
+    is_deployment_managed: Boolean
+    is_optional: Boolean
+}
+-- Documentation for environment variable configuration
+
+value ApplicationConfig {
+    app_name: String  -- Display name for the application (e.g., "Tempo")
+    project_slug: String  -- Technical identifier for resource naming (e.g., "axonify_labs")
+}
+-- Centralized application configuration for branding and resource naming
+
+value FeedbackFilterParams {
+    category: FeedbackUrgency?  -- null means "all"
+    target: FeedbackTarget?      -- null means "all"
+    location_id: String?         -- null means "all stores"
+    date_from: Timestamp?
+    date_to: Timestamp?
+    search_text: String?
+}
+-- Filter parameters for feedback list queries
+
+value FeedbackFilterDefaults {
+    category: FeedbackUrgency = immediate
+    target: FeedbackTarget = store
+    date_range_days: Integer = 30
+    first_available_location: Boolean = true
+}
+-- Default filter configuration optimized for store managers
+
+value DateRangeInput {
+    from_date: String  -- ISO date string (YYYY-MM-DD)
+    to_date: String    -- ISO date string (YYYY-MM-DD)
+    browser_timezone: String
+    from_iso: String = toStartOfDayIso(from_date, browser_timezone)
+    to_iso: String = toEndOfDayIso(to_date, browser_timezone)
+}
+-- Date range input with browser timezone-aware ISO conversion
+
+value FeedbackHighlightRule {
+    urgency: FeedbackUrgency = immediate
+    target: FeedbackTarget = store
+    border_class: String = "border-l-4 border-amber-500"
+    background_class: String = "bg-amber-50/30 dark:bg-amber-900/10"
+}
+-- Visual styling rule for urgent feedback highlighting
+
+------------------------------------------------------------
+-- Entities
+------------------------------------------------------------
+
+entity DatabaseInstance {
+    name: String
+    environment: Environment
+    status: DatabaseStatus
+    connection_config: ConnectionConfig
+    credentials: DatabaseCredentials
+    created_at: Timestamp
+    deleted_at: Timestamp?
+}
+-- Represents a Cloud SQL or local PostgreSQL database instance
+
+entity Migration {
+    hash: String
+    filename: String
+    status: MigrationStatus
+    applied_at: Timestamp?
+    error_message: String?
+}
+-- Schema migration tracking
+
+entity CLICommand {
+    type: CommandType
+    arguments: Map<String, Any>
+    environment: Environment
+    requires_confirmation: Boolean
+}
+-- CLI command invocation
+
+entity Story {
+    id: String
+    title: String
+    quality_gates: List<QualityGate>
+    completion_status: QualityGateStatus
+    environment: Environment
+}
+-- Represents a development story with quality gate tracking
+
+entity Dependency {
+    name: String
+    type: DependencyType
+    is_installed: Boolean
+    version: String?
+}
+-- External dependency (Docker, gcloud, git)
+
+entity CloudRunDeployment {
+    service_name: String
+    environment: Environment
+    image_tag: String
+    config: DeploymentConfig
+    deployed_at: Timestamp
+    revision: String
+    custom_domain: CustomDomainConfig?
+}
+-- Cloud Run service deployment with optional custom domain
+
+entity Secret {
+    name: String
+    project: String
+    environment: Environment
+    value: String
+    version: String
+    created_at: Timestamp
+    last_updated_at: Timestamp?
+}
+-- Secret Manager secret
+
+entity IAMPolicyBinding {
+    resource: String  -- Secret or Bucket resource name
+    member: String    -- Service account email
+    role: String      -- IAM role
+    etag: String?     -- For conflict-free updates
+}
+-- IAM policy binding for secrets or buckets
+
+entity TargetEnvironmentConfig {
+    environment: Environment
+    project: String
+    region: String
+    is_protected: Boolean
+    service_account: String
+    cloud_sql_instance: String
+    database_name: String
+    runtime_secrets: List<SecretReference>
+    storage_buckets: List<String>
+    custom_domain: CustomDomainConfig?
+}
+-- Centralized target environment configuration with optional custom domain
+
+entity StorageBucket {
+    name: String
+    provider: StorageProvider
+    cors_config: CORSConfig
+    project: String?
+    environment: Environment
+}
+-- Storage bucket configuration
+
+entity SignedURL {
+    url: String
+    bucket: String
+    object_path: String
+    purpose: SignedURLPurpose
+    expires_at: Timestamp
+    content_type: String?
+}
+-- Generated signed URL for direct client upload/download
+
+entity UserAvatar {
+    user_id: String
+    object_path: String
+    bucket: String
+    cache_buster: String  -- Timestamp or hash for cache invalidation
+    signed_url: SignedURL?
+}
+-- User avatar metadata and storage reference
+
+entity TrustedOriginsConfiguration {
+    source: TrustedOriginsSource
+    env_var_name: String
+    explicit_env_var: String?
+    origins: TrustedOrigins
+}
+-- Runtime configuration for better-auth trusted origins
+
+entity SMSMessage {
+    message_sid: String
+    from_number: String
+    to_number: String
+    body: String
+    received_at: Timestamp
+    tenant_id: String
+}
+-- Incoming SMS message from Twilio
+
+entity Feedback {
+    id: String
+    tenant_id: String
+    message: SMSMessage
+    classification: FeedbackClassification
+    location_id: String?
+    urgency: FeedbackUrgency
+    target: FeedbackTarget
+}
+-- SMS feedback with categorization, urgency, and routing target
+
+entity Tenant {
+    id: String
+    name: String
+    created_at: Timestamp
+    updated_at: Timestamp
+}
+-- Multi-tenant organization
+
+entity User {
+    id: String
+    email: String
+    name: String
+    avatar_path: String?
+    created_at: Timestamp
+    updated_at: Timestamp
+}
+-- Platform user
+
+entity Member {
+    id: String
+    tenant_id: String
+    user_id: String
+    role: TenantRole
+    created_at: Timestamp
+}
+-- Tenant membership linking users to tenants with roles
+
+entity Location {
+    id: String
+    tenant_id: String
+    name: String
+    address: String?
+    created_at: Timestamp
+}
+-- Physical location within a tenant
+
+entity FeedbackFilterState {
+    category: String  -- "immediate" | "medium" | "longer" | "all"
+    target: String    -- "store" | "hq" | "all"
+    location_id: String?  -- null or "all" means all stores
+    date_from: String     -- ISO date string YYYY-MM-DD
+    date_to: String       -- ISO date string YYYY-MM-DD
+    search_text: String
+    current_page: Integer
+}
+-- URL-persisted state for feedback list filters via nuqs
+
+entity FeedbackExportRequest {
+    mode: String  -- "all" | "selected"
+    filters: FeedbackFilterParams
+    requested_at: Timestamp
+    tenant_id: String
+}
+-- Request to export feedback data with active filters
+
+------------------------------------------------------------
+-- Rules (Database Management)
+------------------------------------------------------------
+
+rule CreateDatabaseInstance {
+    when: CLICommand.invoked(type: create, arguments: args, environment: env)
+    if: env.is_protected
+        then: ConfirmationRequired.raised(style: type_to_confirm, message: "protected environment")
+    let credentials = GenerateCredentials()
+    let config = BuildConnectionConfig(env, args, credentials)
+    emit DatabaseInstance.created(
+        name: args.database_name,
+        environment: env,
+        status: creating,
+        connection_config: config,
+        credentials: credentials,
+        created_at: now()
+    )
+    emit StoreCredentialsInSecretManager(credentials, env)
+    emit StoreCredentialsLocally(credentials, env)
+}
+-- Database creation saga with credential generation
+
+rule DeleteDatabaseInstance {
+    when: CLICommand.invoked(type: delete, arguments: args, environment: env)
+    if: env.is_protected
+        then: ConfirmationRequired.raised(style: type_to_confirm, message: "protected environment")
+    emit TerminateActiveConnections(database: args.database_name)
+    emit DatabaseInstance.deleted(name: args.database_name, deleted_at: now())
+    emit Secret.deleted(name: formatDatabaseSecretName(args.database_name, "password"))
+    emit Secret.deleted(name: formatDatabaseSecretName(args.database_name, "username"))
+    emit Secret.deleted(name: formatDatabaseSecretName(args.database_name, "url"))
+}
+-- Database deletion saga with cleanup
+
+rule CheckDatabaseHealth {
+    when: CLICommand.invoked(type: status, arguments: args)
+    let connection = EstablishConnection(args.database_name)
+    let health = connection.is_connected
+        ? healthy
+        : (connection.latency > 5000 ? degraded : failed)
+    emit ConnectionHealthStatus.updated(database: args.database_name, status: health)
+}
+-- Database health check
+
+------------------------------------------------------------
+-- Rules (Migration Management)
+------------------------------------------------------------
+
+rule GenerateMigration {
+    when: CLICommand.invoked(type: generate, arguments: args)
+    let schema_diff = DrizzleKit.compare_schemas(current: DrizzleSchema, previous: last_migration)
+    if: schema_diff.is_empty
+        then: emit NoChangesDetected()
+    else:
+        let migration_file = DrizzleKit.generate_migration(diff: schema_diff)
+        let hash = ComputeMigrationHash(migration_file.content)
+        emit Migration.created(
+            filename: migration_file.filename,
+            hash: hash,
+            status: pending
+        )
+}
+-- Idempotent migration generation
+
+rule ExecuteMigrations {
+    when: CLICommand.invoked(type: migrate, arguments: args, environment: env)
+    let pending = DetectPendingMigrations(args.database_name)
+    if: pending.is_empty
+        then: emit NoPendingMigrations()
+    if: env.is_protected
+        then: ConfirmationRequired.raised(
+            style: type_to_confirm,
+            message: "migrate {pending.count} migrations to {env.name}"
+        )
+    let connection = EstablishConnection(args.database_name)
+    emit BeginTransaction(connection)
+    for migration in pending:
+        try:
+            emit ApplyMigration(connection, migration)
+            emit Migration.updated(hash: migration.hash, status: applied, applied_at: now())
+        catch error:
+            emit RollbackTransaction(connection)
+            emit Migration.updated(hash: migration.hash, status: failed, error_message: error.message)
+            throw MigrationError(migration, error)
+    emit CommitTransaction(connection)
+}
+-- Transaction-safe migration execution
+
+rule DetectPendingMigrations {
+    when: PendingMigrationsRequested(database: db)
+    let applied = QueryAppliedMigrations(db)  -- from __drizzle_migrations table
+    let available = ListMigrationFiles()
+    let pending = available.filter(m => !applied.contains(m.hash))
+    return pending
+}
+-- Compare migration files to tracking table
+
+rule ComputeMigrationHash {
+    when: MigrationHashRequested(content: content)
+    let hash = NodeCrypto.sha256(content)
+    return hash
+}
+-- Content-based migration hash for idempotent comparison
+
+------------------------------------------------------------
+-- Rules (Deployment and Configuration)
+------------------------------------------------------------
+
+rule DeployToCloudRun {
+    when: CLICommand.invoked(type: deploy, arguments: args, environment: env)
+    if: env.is_protected
+        then: ValidateDeploymentConfig(env, args)
+    emit ValidateSecretsExist(env.runtime_secrets)
+    let image = BuildDockerImage(env, args)
+    let config = PrepareDeploymentConfig(env, args, image)
+    emit CloudRunDeployment.created(
+        service_name: config.service_name,
+        environment: env,
+        image_tag: image,
+        config: config,
+        deployed_at: now(),
+        custom_domain: env.custom_domain
+    )
+    emit GrantIAMPermissions(env.service_account, env.runtime_secrets)
+    let service_url = ResolveServiceURL(config.service_name, env)
+    let effective_url = env.custom_domain.is_configured
+        ? env.custom_domain.url
+        : service_url
+    emit UpdateEnvironmentVariables(config.service_name, {
+        CLOUD_RUN_URL: effective_url,
+        NEXT_PUBLIC_SITE_URL: effective_url
+    })
+    emit CreateNewRevision(config.service_name)
+    emit RouteTrafficToLatestRevision(config.service_name)
+}
+-- Cloud Run deployment with custom domain support
+
+rule ResolveServiceURL {
+    when: ServiceURLRequested(service_name: name, environment: env)
+    let url_result = GCloudCLI.execute([
+        "run", "services", "describe", name,
+        "--region={env.region}",
+        "--format=value(status.url)"
+    ])
+    if: url_result.stdout exists and url_result.stdout.trim() != ""
+        then:
+            emit ServiceURLResolution.created(
+                strategy: describe_api,
+                resolved_url: url_result.stdout.trim(),
+                requires_project_number: false,
+                fallback_attempted: false
+            )
+    else:
+        let project_number = GetProjectNumber(env.project)
+        if: project_number exists
+            then:
+                let fallback_url = "https://{name}-{project_number}.{env.region}.run.app"
+                emit ServiceURLResolution.created(
+                    strategy: project_number_fallback,
+                    resolved_url: fallback_url,
+                    requires_project_number: true,
+                    fallback_attempted: true
+                )
+        else:
+            emit ServiceURLResolution.created(
+                strategy: error,
+                resolved_url: null,
+                requires_project_number: true,
+                fallback_attempted: true
+            )
+            throw DeploymentError("Could not determine service URL: status.url empty and project number unavailable")
+}
+-- Service URL resolution with defensive fallback to project number
+
+rule GetProjectNumber {
+    when: ProjectNumberRequested(project_id: id)
+    let result = GCloudCLI.execute([
+        "projects", "describe", id,
+        "--format=value(projectNumber)"
+    ])
+    if: result.exit_code == 0 and result.stdout.trim() != ""
+        then: return result.stdout.trim()
+    else:
+        return null
+}
+-- Extract project number from GCP project metadata
+
+rule ResolveBaseURL {
+    when: BaseURLRequested()
+    if: process.env.NEXT_PUBLIC_SITE_URL exists
+        then: return process.env.NEXT_PUBLIC_SITE_URL
+    if: process.env.CLOUD_RUN_URL exists
+        then: return process.env.CLOUD_RUN_URL
+    if: process.env.K_SERVICE exists  -- Cloud Run environment variable
+        then: return InferCloudRunURL()
+    else:
+        return "http://localhost:3000"
+}
+-- Base URL resolution with priority fallback
+
+rule ValidateDeploymentConfig {
+    when: DeploymentConfigValidationRequested(env: env, args: args)
+    if: env.is_protected and args.branch not in env.allowed_branches
+        then: throw ConfigurationError("Branch {args.branch} not allowed for {env.name}")
+    if: env.is_protected and args.min_instances < env.min_required_instances
+        then: throw ConfigurationError("Scaling config violates protected environment constraints")
+}
+-- Protected environment deployment validation
+
+rule GrantStoragePermissions {
+    when: CLICommand.invoked(type: grant_permissions, arguments: args, environment: env)
+    for bucket in env.storage_buckets:
+        emit GrantBucketPermissions(
+            bucket: bucket,
+            service_account: env.service_account,
+            roles: ["roles/storage.objectAdmin"]
+        )
+}
+-- Bulk storage IAM permission grants
+
+rule GenerateCloudBuildConfig {
+    when: CloudBuildConfigRequested(env: env)
+    let secrets = env.runtime_secrets.map(s => {
+        env_var: s.name,
+        secret_resource: formatSecretResourcePath(env.project, s.name, s.version)
+    })
+    let dockerfile = GenerateDockerfileFromTemplate(env)
+    emit CloudBuildConfig.created(
+        build_steps: [
+            BuildStep(
+                name: "gcr.io/kaniko-project/executor:latest",
+                args: [
+                    "--dockerfile={dockerfile}",
+                    "--destination={env.project}/{env.service_name}:{env.image_tag}",
+                    "--cache=true",
+                    "--cache-repo={env.cache_repo}",
+                    "--compressed-caching=true",
+                    "--snapshot-mode=redo"
+                ],
+                secret_env: secrets
+            )
+        ],
+        available_secrets: secrets,
+        timeout: "20m"
+    )
+}
+-- Dynamic Cloud Build configuration with secret injection
+
+rule InterpolateSecretNames {
+    when: ConfigurationLoaded(raw_config: config)
+    for field in config.fields where field.value matches "{secret:*}":
+        let secret_name = ExtractSecretName(field.value)
+        let secret_value = SecretManager.get(secret_name)
+        emit config.field_updated(field: field, value: secret_value)
+}
+-- Runtime secret name interpolation via Zod transformation
+
+------------------------------------------------------------
+-- Rules (Storage Abstraction)
+------------------------------------------------------------
+
+rule SelectStorageProvider {
+    when: StorageOperationRequested(env: env)
+    if: env.name == dev and env.storage_config.provider == minio
+        then: return MinIOProvider(env.storage_config)
+    else:
+        return GCSProvider(env.storage_config)
+}
+-- Provider selection based on environment
+
+rule GenerateSignedUploadURL {
+    when: SignedURLRequested(bucket: bucket, object_path: path, purpose: upload, content_type: type)
+    let provider = SelectStorageProvider(current_environment)
+    let config = SignedURLConfig(action: upload, expires: 15m, content_type: type)
+    let signed_url = provider.generate_signed_url(bucket, path, config)
+    emit SignedURL.created(
+        url: signed_url,
+        bucket: bucket,
+        object_path: path,
+        purpose: upload,
+        expires_at: now() + 15m,
+        content_type: type
+    )
+}
+-- Content-type-aware signed URL generation
+
+rule ConfigureBucketCORS {
+    when: BucketCreated(bucket: bucket, provider: gcs)
+    let cors = CORSConfig(
+        allowed_origins: ["*"],
+        allowed_methods: ["GET", "POST", "PUT", "DELETE"],
+        max_age_seconds: 3600
+    )
+    emit GCSBucket.cors_updated(bucket: bucket, cors: cors)
+}
+-- Automatic CORS configuration for GCS buckets
+
+rule UpdateUserAvatar {
+    when: AvatarUploadCompleted(user_id: user_id, object_path: path, bucket: bucket)
+    let cache_buster = now().timestamp
+    emit UserAvatar.updated(
+        user_id: user_id,
+        object_path: path,
+        bucket: bucket,
+        cache_buster: cache_buster
+    )
+}
+-- Avatar update with cache-busting
+
+------------------------------------------------------------
+-- Rules (Infrastructure: Trusted Origins and Cloud Run URL Formats)
+------------------------------------------------------------
+
+rule ResolveTrustedOrigins {
+    when: TrustedOriginsRequested()
+    let explicit_origins = process.env.BETTER_AUTH_TRUSTED_ORIGINS
+    let config = AuthConfiguration.default()
+    if: explicit_origins exists
+        then:
+            emit TrustedOriginsConfiguration.created(
+                source: explicit_env_var,
+                explicit_env_var: config.better_auth_trusted_origins_env_var,
+                origins: TrustedOrigins.created(
+                    source: explicit_env_var,
+                    origins: explicit_origins.split(config.trusted_origins_delimiter_pattern)
+                        .map(o => o.trim())
+                        .filter(o => o.length > 0),
+                    delimiter: config.trusted_origins_separator
+                )
+            )
+    else:
+            emit TrustedOriginsConfiguration.created(
+                source: derived_from_base_url,
+                origins: TrustedOrigins.created(
+                    source: derived_from_base_url,
+                    origins: [ResolveBaseURL()],
+                    delimiter: config.trusted_origins_separator
+                )
+            )
+}
+-- Trusted origins resolution with fallback to base URL
+
+rule BuildTrustedOriginsEnv {
+    when: DeploymentRequiresTrustedOrigins(cloud_run_url, service_name, region, project_id, additional_origins)
+    let project_number = GetProjectNumber(project_id)
+    let config = AuthConfiguration.default()
+
+    if: project_number not exists
+        then:
+            emit Warning("Could not resolve project number; BETTER_AUTH_TRUSTED_ORIGINS will not be set")
+            return null
+
+    let project_number_url = format(
+        config.cloud_run_project_number_url_pattern,
+        service_name: service_name,
+        project_number: project_number,
+        region: region
+    )
+
+    let all_origins = [
+        ...(additional_origins ?? []).map(o => o.trim()).filter(o => o.length > 0),
+        cloud_run_url.trim(),
+        project_number_url
+    ].filter(Boolean)
+    
+    let unique_origins = [...new Set(all_origins)]
+
+    if: unique_origins.length <= 1
+        then: return ""
+    else:
+        emit TrustedOrigins.created(
+            source: derived_from_base_url,
+            origins: unique_origins,
+            delimiter: config.trusted_origins_separator
+        )
+}
+-- Build trusted origins with custom domain support
+
+rule ResolveGCPProjectNumber {
+    when: ProjectNumberRequested(project_id)
+    let gcloud_result = GCloudCLI.execute([
+        "projects", "describe", project_id,
+        "--format=value(projectNumber)"
+    ])
+    if: gcloud_result.exit_code == 0 and gcloud_result.stdout.trim() != ""
+        then:
+            emit GCPProjectMetadata.created(
+                project_id: project_id,
+                project_number: gcloud_result.stdout.trim()
+            )
+    else:
+        emit GCPProjectMetadata.created(
+                project_id: project_id,
+                project_number: null
+            )
+}
+-- GCP project number resolution with graceful failure
+
+rule InjectTrustedOriginsOnExistingServiceDeploy {
+    when: CloudRunDeployment.updating(service_name, environment: env)
+    let existing_url = GetCloudRunServiceURL(service_name, env)
+    let service_name = GetServiceName(service_name)
+    let region = env.region
+    let project_id = env.project
+    let additional_origins = env.custom_domain.is_configured
+        ? [env.custom_domain.url]
+        : []
+    let trusted_origins = BuildTrustedOriginsEnv(existing_url, service_name, region, project_id, additional_origins)
+    emit EnvironmentVariable.updated(
+        service: service_name,
+        env_var: config.better_auth_trusted_origins_env_var,
+        value: trusted_origins.origins_string
+    )
+}
+-- Inject trusted origins including custom domain when updating existing service
+
+rule InjectTrustedOriginsOnNewServiceDeploy {
+    when: CloudRunDeployment.creating(service_name, environment: env)
+    let service_url = InferCloudRunURL(service_name, env)
+    let region = env.region
+    let project_id = env.project
+    let additional_origins = env.custom_domain.is_configured
+        ? [env.custom_domain.url]
+        : []
+    let trusted_origins = BuildTrustedOriginsEnv(service_url, service_name, region, project_id, additional_origins)
+    let effective_url = env.custom_domain.is_configured
+        ? env.custom_domain.url
+        : service_url
+    emit DeploymentConfig.updated(
+        service_name: service_name,
+        environment_variables: {
+            ...(existing environment variables),
+            CLOUD_RUN_URL: effective_url,
+            NEXT_PUBLIC_SITE_URL: effective_url,
+            BETTER_AUTH_TRUSTED_ORIGINS: trusted_origins.origins_string
+        }
+    )
+}
+-- Inject trusted origins and custom domain when creating new service
+
+------------------------------------------------------------
+-- Rules (Multi-Tenant Authorization)
+------------------------------------------------------------
+
+rule AuthorizeAdminAction {
+    when: AdminActionRequested(user_id, tenant_id, action)
+    let membership = Member.find(user_id: user_id, tenant_id: tenant_id)
+    if: membership not exists
+        then: throw AuthorizationError("User is not a member of tenant")
+    if: membership.role not in [owner, admin]
+        then: throw AuthorizationError("Insufficient permissions for admin action")
+    emit AdminActionAuthorized(user_id, tenant_id, action)
+}
+-- Tenant-scoped admin authorization
+
+rule CreateTenantMember {
+    when: MemberCreationRequested(tenant_id, user_id, role)
+    let actor_context = GetTenantContext(current_user, tenant_id)
+    if: !actor_context.can_manage_users
+        then: throw AuthorizationError("Cannot manage users in this tenant")
+    emit Member.created(
+        id: generate_id(),
+        tenant_id: tenant_id,
+        user_id: user_id,
+        role: role,
+        created_at: now()
+    )
+}
+-- Member creation with authorization check
+
+------------------------------------------------------------
+-- Rules (SMS Feedback Workflow)
+------------------------------------------------------------
+
+rule ProcessIncomingSMS {
+    when: TwilioWebhook.received(payload)
+    if: !ValidateTwilioSignature(payload)
+        then: throw SecurityError("Invalid Twilio signature")
+    let tenant = ResolveTenantFromPhoneNumber(payload.To)
+    emit SMSMessage.created(
+        message_sid: payload.MessageSid,
+        from_number: payload.From,
+        to_number: payload.To,
+        body: payload.Body,
+        received_at: now(),
+        tenant_id: tenant.id
+    )
+    emit ClassifyFeedback(message)
+}
+-- Incoming SMS processing with tenant resolution
+
+rule ClassifyFeedback {
+    when: SMSMessage.created(message)
+    let classification = OpenAIAPI.classify(message.body)
+    emit Feedback.created(
+        id: generate_id(),
+        tenant_id: message.tenant_id,
+        message: message,
+        classification: FeedbackClassification.created(
+            category: classification.category,
+            source: ai,
+            confidence_score: classification.confidence,
+            classified_at: now()
+        ),
+        urgency: DeriveUrgency(classification),
+        target: DeriveTarget(classification)
+    )
+}
+-- AI-powered feedback classification with urgency and target derivation
+
+rule OverrideFeedbackClassification {
+    when: ManualClassificationRequested(feedback_id, new_category)
+    let actor_context = GetTenantContext(current_user, feedback.tenant_id)
+    if: !actor_context.can_manage_users
+        then: throw AuthorizationError("Cannot manage feedback in this tenant")
+    emit Feedback.classification_updated(
+        id: feedback_id,
+        classification: FeedbackClassification.created(
+            category: new_category,
+            source: manual,
+            confidence_score: null,
+            classified_at: now()
+        )
+    )
+}
+-- Manual classification override with authorization
+
+------------------------------------------------------------
+-- Rules (Feedback Operational Dashboard)
+------------------------------------------------------------
+
+rule LoadFeedbackListWithFilters {
+    when: FeedbackListRequested(tenant_id, filter_state: state)
+    let params = BuildFilterParams(state)
+    let feedback_items = QueryFeedback(
+        tenant_id: tenant_id,
+        category: params.category,
+        target: params.target,
+        location_id: params.location_id,
+        date_from: params.date_from,
+        date_to: params.date_to,
+        search_text: params.search_text,
+        limit: state.items_per_page,
+        offset: (state.current_page - 1) * state.items_per_page
+    )
+    emit FeedbackList.loaded(items: feedback_items, total: CountFeedback(params))
+}
+-- Load feedback with multi-dimensional filtering
+
+rule ApplyFeedbackFilterDefaults {
+    when: FeedbackListInitialized(tenant_id)
+    let defaults = FeedbackFilterDefaults.default()
+    let locations = QueryTenantLocations(tenant_id)
+    let first_location = locations.sorted_by_name().first()
+    emit FeedbackFilterState.initialized(
+        category: "immediate",
+        target: "store",
+        location_id: first_location?.id ?? null,
+        date_from: formatDateForInput(now() - 30.days),
+        date_to: formatDateForInput(now()),
+        search_text: "",
+        current_page: 1
+    )
+}
+-- Initialize feedback filters with store manager-optimized defaults
+
+rule SyncFeedbackFiltersToURL {
+    when: FeedbackFilterState.changed(state)
+    emit URLQueryParams.updated(
+        category: state.category,
+        target: state.target,
+        locationId: state.location_id,
+        dateFrom: state.date_from,
+        dateTo: state.date_to,
+        query: state.search_text,
+        currentPage: state.current_page
+    )
+}
+-- Synchronize filter state to URL for shareability and persistence
+
+rule ResetPaginationOnFilterChange {
+    when: FeedbackFilterState.filter_changed(changed_field)
+    if: changed_field in ["category", "target", "location_id", "date_from", "date_to"]
+        then: emit FeedbackFilterState.page_reset(current_page: 1)
+}
+-- Reset to page 1 when filter dimensions change
+
+rule HighlightUrgentFeedback {
+    when: FeedbackRowRendered(feedback: item)
+    let highlight_rule = FeedbackHighlightRule.default()
+    if: item.urgency == highlight_rule.urgency and item.target == highlight_rule.target
+        then:
+            emit FeedbackRow.styled(
+                id: item.id,
+                classes: [
+                    highlight_rule.border_class,
+                    highlight_rule.background_class
+                ]
+            )
+}
+-- Apply visual highlighting to urgent store-targeted feedback
+
+rule ExportFeedbackWithFilters {
+    when: FeedbackExportRequested(request)
+    let params = request.filters
+    let feedback_items = QueryFeedback(
+        tenant_id: request.tenant_id,
+        category: params.category,
+        target: params.target,
+        location_id: params.location_id,
+        date_from: params.date_from,
+        date_to: params.date_to,
+        search_text: params.search_text,
+        limit: null,  -- No pagination for export
+        offset: 0
+    )
+    let csv_data = FormatFeedbackAsCSV(feedback_items)
+    emit FeedbackExport.generated(
+        filename: "feedback-export-{now().iso_date}.csv",
+        content: csv_data,
+        row_count: feedback_items.count
+    )
+}
+-- Export feedback as CSV with active filter preservation
+
+------------------------------------------------------------
+-- Error Rules
+------------------------------------------------------------
+
+rule HandleMigrationError {
+    when: Migration.failed(migration, error)
+    emit ErrorContext.created(
+        service: "database",
+        environment: current_environment.name,
+        field: migration.filename,
+        recovery_steps: [
+            "Review migration file for syntax errors",
+            "Check database connection and permissions",
+            "Verify schema compatibility",
+            "Review migration logs for detailed error messages"
+        ]
+    )
+}
+-- Migration error context enrichment
+
+rule HandleGCPPermissionError {
+    when: GCPError.raised(error) and error.code contains "permission"
+    emit ErrorContext.created(
+        service: "gcp",
+        environment: current_environment.name,
+        recovery_steps: [
+            "Verify service account has required IAM roles",
+            "Check Secret Manager Admin API is enabled",
+            "Ensure gcloud CLI is authenticated with correct account",
+            "Review IAM policy bindings in GCP Console"
+        ]
+    )
+}
+-- GCP permission error guidance
+
+rule HandleNetworkError {
+    when: NetworkError.raised(error)
+    let diagnosis = DiagnoseNetworkIssue(error)
+    emit ErrorContext.created(
+        service: "network",
+        environment: current_environment.name,
+        recovery_steps: diagnosis.recovery_steps
+    )
+}
+-- Network error diagnosis (Docker vs proxy vs timeout)
+
+------------------------------------------------------------
+-- Deferred
+------------------------------------------------------------
+
+-- Deferred: ORM query optimization, connection pooling tuning
+-- Deferred: Secrets rotation automation
+-- Deferred: Multi-region deployment orchestration
+-- Deferred: Automated rollback on deployment failure
+-- Deferred: Integration test automation for Cloud Run deployments
+-- Deferred: Storage bucket lifecycle policies
+-- Deferred: Advanced caching strategies for signed URLs
+-- Deferred: Batch upload operations
+-- Deferred: Storage usage analytics and quotas
+-- Deferred: Avatar image optimization and resizing
+-- Deferred: CDN integration for avatar delivery
+-- Deferred: Dependency version automated updates across packages
+-- Deferred: Feature flag implementation for gradual rollouts
+-- Deferred: Advanced feedback analytics with trend analysis
+-- Deferred: Multi-language support for feedback classification
+-- Deferred: Webhook retry and dead-letter queue for SMS processing
+-- Deferred: Custom domain SSL certificate automation and renewal
+-- Deferred: Custom domain DNS validation and health checks
+-- Deferred: Automatic domain mapping creation in Cloud Run
+-- Deferred: Real-time feedback dashboard updates via WebSocket or SSE
+-- Deferred: Saved filter presets for feedback dashboard
+-- Deferred: Feedback notification system for urgent items
+-- Deferred: Bulk feedback operations (bulk categorization, bulk flagging)
